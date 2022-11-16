@@ -8,7 +8,7 @@ profile = "black"
 src_paths = ["src", "tests"]
 
 [tool.poetry]
-name = "OPIMIZATION_OF_RESIN_INFUSION_PROCESS"
+name = "segCT"
 version = "0.1.0"
 description = ""
 authors = ["keerthi krishna PARVATHANENI <krishna.klume@gmail.com>"]
