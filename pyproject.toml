@@ -22,6 +22,7 @@ pymesh = "^1.*"
 meshio = "^6.*"
 pygmsh = "7.1.*"
 gmsh = "4.10.*"
+scikit-image = "0.19.3"
 
 [tool.poetry.dev-dependencies]
 black = "22.*"
