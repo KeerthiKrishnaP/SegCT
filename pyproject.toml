@@ -1,0 +1,35 @@
+[tool.black]
+line-length = 88
+target-version = ["py39"]
+
+[tool.isort]
+multi_line_output = 3
+profile = "black"
+src_paths = ["src", "tests"]
+
+[tool.poetry]
+name = "OPIMIZATION_OF_RESIN_INFUSION_PROCESS"
+version = "0.1.0"
+description = ""
+authors = ["keerthi krishna PARVATHANENI <krishna.klume@gmail.com>"]
+
+[tool.poetry.dependencies]
+numpy = "1.*"
+matplotlib = "^3.5.3"
+python = "^3.10"
+pydantic = "^1.10.1"
+pymesh = "^1.*"
+meshio = "^6.*"
+pygmsh = "7.1.*"
+gmsh = "4.10.*"
+
+[tool.poetry.dev-dependencies]
+black = "22.*"
+isort = "5.*"
+
+[tool.poetry.group.dev.dependencies]
+black = {version = "^22.8.0", allow-prereleases = true}
+
+[build-system]
+build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0"]
