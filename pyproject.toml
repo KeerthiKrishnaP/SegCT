@@ -15,14 +15,15 @@ authors = ["keerthi krishna PARVATHANENI <krishna.klume@gmail.com>"]
 
 [tool.poetry.dependencies]
 numpy = "1.*"
-matplotlib = "^3.5.3"
-python = "^3.10"
-pydantic = "^1.10.1"
-pymesh = "^1.*"
-meshio = "^6.*"
+matplotlib = "3.8.2"
+python = "^3.11"
+pydantic = ">=1.10.1"
+pymesh = ">=1.*"
+meshio = "5.3.5"
 pygmsh = "7.1.*"
 gmsh = "4.10.*"
 scikit-image = "0.19.3"
+plotly = "5.19"
 
 [tool.poetry.dev-dependencies]
 black = "22.*"

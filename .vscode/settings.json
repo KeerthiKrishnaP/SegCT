@@ -16,7 +16,7 @@
     "workbench.startupEditor": "none",
      "[python]": {
       "editor.codeActionsOnSave": {
-        "source.organizeImports": true
+        "source.organizeImports": "explicit"
       }
     },
     "[vue]": {
