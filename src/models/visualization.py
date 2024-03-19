@@ -7,11 +7,13 @@ from matplotlib.patches import Rectangle
 from matplotlib.widgets import Button, RectangleSelector, Slider, TextBox
 from PIL import Image
 
+from computations.compute import image_resize
+
 
 class ImageViewer:
     def __init__(self, images):
         self.images = images
-        self.starting_slice = 0  # Starting slice index
+        self.starting_slice = 1  # Starting slice index
         self.final_slice = len(images) - 1  # Final slice index
         self.rectangle_coords = None
         self.figure, self.axis = plt.subplots()
@@ -21,6 +23,8 @@ class ImageViewer:
             self.image_to_show, ax=self.axis, orientation="horizontal"
         )
         self.colorbar.set_label("Intensity")
+
+        """For slider"""
         self.slider_bar = plt.axes((0.1, 0.1, 0.8, 0.03))
         self.slider = Slider(
             self.slider_bar,
@@ -30,10 +34,17 @@ class ImageViewer:
             valinit=self.starting_slice,
             valstep=1,
         )
-        self.image_number = plt.axes((0.11, 0.01, 0.12, 0.05))
-        self.image_text_box = TextBox(
-            self.image_number, "Slice #", initial=str(self.starting_slice)
+        self.slider.on_changed(self.update)
+
+        """For show the slice by number"""
+        self.image_text = TextBox(
+            plt.axes((0.11, 0.01, 0.12, 0.05)),
+            "Slice #",
+            initial=str(self.starting_slice),
         )
+        self.image_text.on_submit(self.submit)
+
+        """For creating sub images"""
         self.rectangle_selector = RectangleSelector(
             self.axis,
             self.onselect,
@@ -43,8 +54,6 @@ class ImageViewer:
             spancoords="pixels",
             interactive=True,
         )
-        self.slider.on_changed(self.update)
-        self.image_text_box.on_submit(self.submit)
         self.starting_text_box = TextBox(
             plt.axes((0.2, 0.8, 0.1, 0.04)), "Start:", initial=str(self.starting_slice)
         )
@@ -58,6 +67,14 @@ class ImageViewer:
         )
         self.save_button = Button(plt.axes((0.4, 0.8, 0.15, 0.04)), "Save Dataset")
         self.save_button.on_clicked(self.save_sub_images)
+
+        """For creating sub images"""
+        self.compression_ratio_input = TextBox(
+            plt.axes((0.85, 0.8, 0.1, 0.04)),
+            "compression ratio:",
+            initial=str(self.starting_slice),
+        )
+        self.compression_ratio_input.on_submit(self.show_compressed_image)
 
     def onselect(self, eclick, erelease):
         self.rectangle_coords = (
@@ -85,6 +102,21 @@ class ImageViewer:
         self.final_slice = min(len(self.images) - 1, self.starting_slice + 1)
         self.image_to_show.set_data(self.images[self.starting_slice])
         self.figure.canvas.draw_idle()
+
+    def show_compressed_image(self, compresion_ratio_in_text):
+        try:
+            if float(compresion_ratio_in_text) >= 0:
+                resized_image = image_resize(
+                    self.images, float(compresion_ratio_in_text)
+                )
+                self.images = resized_image
+                self.figure.canvas.draw_idle()
+            else:
+                print("Compression ratio cannot be negtive.")
+        except ValueError:
+            print(
+                "Invalid input: Please enter an positive real number for compression."
+            )
 
     def submit(self, slice_number_in_text):
         try:
@@ -118,7 +150,7 @@ class ImageViewer:
                 sub_image = Image.fromarray(
                     np.array(self.images[i])[start_y:end_y, start_x:end_x]
                 )
-                sub_image.save(f"{path}/sub_image_{i}.png")
+                sub_image.save(f"{path}/sub_image_{i}.tif")
                 print(f"Sub-image {i} saved.")
         else:
             print("Please select a rectangle before saving sub-images.")
