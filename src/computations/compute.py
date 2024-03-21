@@ -1,10 +1,12 @@
-from typing import Optional
+import itertools
+from multiprocessing import pool
 
 import numpy as np
 from pydantic import NonNegativeInt
-from scipy.linalg import eig
 from scipy.ndimage import convolve
 from skimage.transform import resize
+
+from computations.helpers import parallel_compute_eigen
 
 
 def image_resize(image: np.ndarray, compression_ratio: float) -> np.ndarray:
@@ -47,37 +49,26 @@ def structure_anisotropty(strcture_tensor, window_radius) -> np.ndarray:
     return structure_anisotropty.astype(np.float32)
 
 
-def eigien_values(S: dict):
-
-    lambda1, vec1 = eig(
-        [
-            [S["S11"], S["S12"], S["S13"]],
-            [S["S12"], S["S22"], S["S23"]],
-            [S["S13"], S["S23"], S["S33"]],
-        ]
-    )
-
-    idx = np.argsort(lambda1)
-    lambda1 = lambda1[idx]
-    vec1 = vec1[:, idx]
-
-    beta = 1 - lambda1[:, 0] / lambda1[:, 2]
-    beta[np.isnan(beta)] = 0
-
-    if len(lambda1.shape) == 1:
-        return beta
-    elif lambda1.shape[1] == 1:
-        return lambda1, vec1[:, :, 0], beta
+def eigen_values_and_vectors(
+    structure_tensor: dict[str, np.ndarray]
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    if len(structure_tensor["S11"]) > 0:
+        structure_tensor_per_pixel = np.zeros(
+            (len(structure_tensor["S11"].reshape(-1)), 3, 3)
+        )
     else:
-        lambda1 = lambda1.T
-        vec1 = vec1.swapaxes(1, 2)
-        lambda1 = lambda1.squeeze()
-        vec1 = vec1.squeeze()
+        raise ValueError("The structure tensor cannot be empty")
 
-        return lambda1, vec1[:, :, 0], vec1[:, :, 1], vec1[:, :, 2], beta
+    for i, j in itertools.product(range(3), range(3)):
+        string_name = "".join(["S", str(i + 1), str(j + 1)])
+        structure_tensor_per_pixel[:, i, j] = structure_tensor[string_name].reshape(-1)
+
+    return parallel_compute_eigen(structure_tensor_per_pixel)
 
 
-def structural_tensor(image: np.ndarray, window_radius: NonNegativeInt):
+def structural_tensor(
+    image: np.ndarray, window_radius: NonNegativeInt
+) -> dict[str, np.ndarray]:
     image = np.pad(
         image,
         (
@@ -166,5 +157,4 @@ def structural_tensor(image: np.ndarray, window_radius: NonNegativeInt):
             weights,
             mode="constant",
         ),
-        "radius": window_radius,
     }
