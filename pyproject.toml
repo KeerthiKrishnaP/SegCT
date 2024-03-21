@@ -15,8 +15,8 @@ authors = ["keerthi krishna PARVATHANENI <krishna.klume@gmail.com>"]
 
 [tool.poetry.dependencies]
 numpy = "1.*"
-matplotlib = "3.8.2"
-python = "^3.11"
+matplotlib = "3.8.3"
+python = "3.10.6"
 pydantic = ">=1.10.1"
 pymesh = ">=1.*"
 meshio = "5.3.5"
