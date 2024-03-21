@@ -1,2 +1,2 @@
-*.test
-*.src/datasets
+test/*
+src/datasets/*
