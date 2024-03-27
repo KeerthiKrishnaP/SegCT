@@ -16,5 +16,3 @@ class EvenNumberListInput(BaseModel):
 
 class Operations(Enum):
     CST = "COMPUTE STRUCTURE TENSOR"
-    CEV = "COMPUTE EIGEN VALUES"
-    CFV = "COMPUTE FEATURE VECTORS"

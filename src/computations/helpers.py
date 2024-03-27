@@ -1,3 +1,4 @@
+import os
 from multiprocessing import Pool
 
 import numpy as np
@@ -10,9 +11,9 @@ def compute_eigen(array_chunk) -> tuple[np.ndarray, np.ndarray]:
 
 
 def parallel_compute_eigen(
-    arr,
+    structural_tensor,
 ) -> list[tuple[np.ndarray, np.ndarray]]:
-    chunks = np.split(arr, arr.shape[-1], axis=-1)
+    chunks = np.split(structural_tensor, structural_tensor.shape[-1], axis=-1)
     with Pool() as pool:
         results = pool.map(compute_eigen, chunks)
 
