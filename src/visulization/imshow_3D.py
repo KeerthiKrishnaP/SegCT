@@ -1,12 +1,16 @@
+from typing import Optional
+
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Rectangle
 from matplotlib.widgets import Button, Slider, TextBox
 
 
-def show_3D_stack(images, number_of_slices) -> None:
+def show_3D_stack(images, number_of_slices=None) -> None:
     fig, ax = plt.subplots()
     plt.subplots_adjust()
+    if number_of_slices is None:
+        number_of_slices = images.shape[0] - 1
     img = ax.imshow(images[number_of_slices], cmap="gray")
     ax_slider = plt.axes((0.1, 0.1, 0.8, 0.03))  # [left, bottom, width, height]
     slider = Slider(
@@ -36,3 +40,4 @@ def show_3D_stack(images, number_of_slices) -> None:
     slider.on_changed(update)
     text_box.on_submit(submit)
     plt.show()
+    plt.show(block=False)
