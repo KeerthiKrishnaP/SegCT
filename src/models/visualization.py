@@ -13,7 +13,7 @@ from computations.compute import image_resize
 class ImageViewer:
     def __init__(self, images):
         self.images = images
-        self.starting_slice = 1  # Starting slice index
+        self.starting_slice = 0  # Starting slice index
         self.final_slice = len(images) - 1  # Final slice index
         self.rectangle_coords = None
         self.figure, self.axis = plt.subplots()
@@ -143,14 +143,16 @@ class ImageViewer:
             )
             print(int(self.starting_text_box.text))
             print(self.rectangle_coords)
-            for i in range(
-                int(self.starting_text_box.text),
-                int(self.final_text_box.text),
+            for index, i in enumerate(
+                range(
+                    int(self.starting_text_box.text),
+                    int(self.final_text_box.text),
+                )
             ):
                 sub_image = Image.fromarray(
                     np.array(self.images[i])[start_y:end_y, start_x:end_x]
                 )
-                sub_image.save(f"{path}/sub_image_{i}.tif")
-                print(f"Sub-image {i} saved.")
+                sub_image.save(f"{path}/{index}.tif")
+                # print(f"Sub-image {index} saved.")
         else:
             print("Please select a rectangle before saving sub-images.")

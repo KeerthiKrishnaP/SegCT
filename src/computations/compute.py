@@ -1,5 +1,7 @@
 import itertools
+import json
 from multiprocessing import pool
+from pathlib import Path
 
 import numpy as np
 from pydantic import NonNegativeInt
@@ -7,6 +9,12 @@ from scipy.ndimage import convolve
 from skimage.transform import resize
 
 from computations.helpers import parallel_compute_eigen
+from helpers.data_dumpers import (
+    STRUCTURE_TENSOR_DIRECTORY,
+    NumpyEncoder,
+    clear_folder,
+    create_folder_if_not_exists,
+)
 
 
 def image_resize(image: np.ndarray, compression_ratio: float) -> np.ndarray:
@@ -67,8 +75,12 @@ def eigen_values_and_vectors(
 
 
 def structural_tensor(
-    image: np.ndarray, window_radius: NonNegativeInt
+    image: np.ndarray,
+    window_radius: NonNegativeInt,
+    save: bool = False,
+    clear_history: bool = False,
 ) -> dict[str, np.ndarray]:
+
     image = np.pad(
         image,
         (
@@ -101,60 +113,91 @@ def structural_tensor(
         (2 * window_radius + 1, 2 * window_radius + 1, 2 * window_radius + 1)
     )
     weights /= np.sum(weights)
-
+    S11 = convolve(
+        structure_tensor_11[
+            window_radius:-window_radius,
+            window_radius:-window_radius,
+            window_radius:-window_radius,
+        ],
+        weights,
+        mode="constant",
+    )
+    S22 = convolve(
+        structure_tensor_22[
+            window_radius:-window_radius,
+            window_radius:-window_radius,
+            window_radius:-window_radius,
+        ],
+        weights,
+        mode="constant",
+    )
+    S33 = convolve(
+        structure_tensor_33[
+            window_radius:-window_radius,
+            window_radius:-window_radius,
+            window_radius:-window_radius,
+        ],
+        weights,
+        mode="constant",
+    )
+    S12 = convolve(
+        structure_tensor_12[
+            window_radius:-window_radius,
+            window_radius:-window_radius,
+            window_radius:-window_radius,
+        ],
+        weights,
+        mode="constant",
+    )
+    S13 = convolve(
+        structure_tensor_13[
+            window_radius:-window_radius,
+            window_radius:-window_radius,
+            window_radius:-window_radius,
+        ],
+        weights,
+        mode="constant",
+    )
+    S23 = convolve(
+        structure_tensor_23[
+            window_radius:-window_radius,
+            window_radius:-window_radius,
+            window_radius:-window_radius,
+        ],
+        weights,
+        mode="constant",
+    )
+    if not save:
+        return {
+            "S11": S11,
+            "S22": S22,
+            "S33": S33,
+            "S12": S12,
+            "S13": S13,
+            "S23": S23,
+        }
+    if clear_history:
+        clear_folder(path=Path(STRUCTURE_TENSOR_DIRECTORY))
+    with open(
+        f"{STRUCTURE_TENSOR_DIRECTORY}/structural_tensor_w_{window_radius}.json", "w"
+    ) as file:
+        json.dump(
+            {
+                "S11": S11,
+                "S22": S22,
+                "S33": S33,
+                "S12": S12,
+                "S13": S13,
+                "S23": S23,
+            },
+            file,
+            cls=NumpyEncoder,
+        )
     return {
-        "S11": convolve(
-            structure_tensor_11[
-                window_radius:-window_radius,
-                window_radius:-window_radius,
-                window_radius:-window_radius,
-            ],
-            weights,
-            mode="constant",
-        ),
-        "S22": convolve(
-            structure_tensor_22[
-                window_radius:-window_radius,
-                window_radius:-window_radius,
-                window_radius:-window_radius,
-            ],
-            weights,
-            mode="constant",
-        ),
-        "S33": convolve(
-            structure_tensor_33[
-                window_radius:-window_radius,
-                window_radius:-window_radius,
-                window_radius:-window_radius,
-            ],
-            weights,
-            mode="constant",
-        ),
-        "S12": convolve(
-            structure_tensor_12[
-                window_radius:-window_radius,
-                window_radius:-window_radius,
-                window_radius:-window_radius,
-            ],
-            weights,
-            mode="constant",
-        ),
-        "S13": convolve(
-            structure_tensor_13[
-                window_radius:-window_radius,
-                window_radius:-window_radius,
-                window_radius:-window_radius,
-            ],
-            weights,
-            mode="constant",
-        ),
-        "S23": convolve(
-            structure_tensor_23[
-                window_radius:-window_radius,
-                window_radius:-window_radius,
-                window_radius:-window_radius,
-            ],
-            weights,
-            mode="constant",
-        ),
+        "S11": S11,
+        "S22": S22,
+        "S33": S33,
+        "S12": S12,
+        "S13": S13,
+        "S23": S23,
     }
