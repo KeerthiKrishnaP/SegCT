@@ -1,5 +1,7 @@
 import os
 from multiprocessing import Pool
+from pathlib import Path
+from typing import Final
 
 import numpy as np
 
@@ -18,3 +20,8 @@ def parallel_compute_eigen(
         results = pool.map(compute_eigen, chunks)
 
     return results
+
+
+RESULTS_DIRECTORY: Final[Path] = Path(
+    Path(os.path.realpath(__file__)).parents[0], "results/"
+)

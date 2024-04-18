@@ -40,4 +40,3 @@ def show_3D_stack(images, number_of_slices=None) -> None:
     slider.on_changed(update)
     text_box.on_submit(submit)
     plt.show()
-    plt.show(block=False)

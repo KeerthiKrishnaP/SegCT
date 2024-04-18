@@ -7,12 +7,9 @@ import numpy as np
 def make_image_to_chunks(
     image: np.ndarray, number_of_chunks: int | None, pad: bool, pad_length: int = 2
 ) -> dict[str, np.ndarray]:
-
-    if number_of_chunks is None:
-        if not (number_of_chunks := os.cpu_count()):
-            raise KeyError("Python cannot find any CPU's for parallelization")
-
     direction = np.argmax(image.shape)
+    if number_of_chunks is None:
+        number_of_chunks = 4
     number_of_voxels_in_chunk = int(image.shape[direction] / number_of_chunks)
     image_chunks = defaultdict()
     chunk_shape = [
