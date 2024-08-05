@@ -1,37 +1,45 @@
-import os
 from collections import defaultdict
-from typing import Any
 
 import numpy as np
 
 
 class ImageChunker:
     def __init__(
-            self,
-            image: np.ndarray,
-            number_of_chunks: int | None,
-            pad_length: int | None,
-            ) -> None:
+        self,
+        image: np.ndarray,
+        number_of_chunks: int | None,
+        pad_length: int | None,
+    ) -> None:
         self.image = image
         self.number_of_chunks = self.check_number_of_chunks(number_of_chunks)
         self.pad_length = self.check_pad_length(pad_length)
-        self.chunks:dict[str, np.ndarray] = self.make_image_to_chunks()
+        self.chunks: dict[str, np.ndarray] = self.make_image_to_chunks()
 
-    def check_pad_length(self,pad_length: int| None) -> int:
+    def check_pad_length(self, pad_length: int | None) -> int:
         if pad_length is not None:
             return pad_length
-        print("Warning: Additional information not provided. Using default value for Pad = 6.")
+        print(
+            "Warning: Additional information not provided. Using default value for Pad = 6."
+        )
         return 6
 
-    def check_number_of_chunks(self, number_of_chunks: int| None) -> int:
+    def check_number_of_chunks(self, number_of_chunks: int | None) -> int:
         if number_of_chunks is not None:
             return number_of_chunks
-        print("Warning: Additional information not provided. Using default value for Number of chunks = 4.")
+        print(
+            "Warning: Additional information not provided. Using default value for Number of chunks = 4."
+        )
         return 4
 
     def make_image_to_chunks(self) -> dict[str, np.ndarray]:
         direction = np.argmax(self.image.shape)
-        number_of_voxels_in_chunk = int(self.image.shape[direction] / self.number_of_chunks)
+        number_of_voxels_in_chunk = int(
+            self.image.shape[direction] / self.number_of_chunks
+        )
+        # pad the image boundaries to avoid the conflits while chunking
+        self.image = np.pad(self.image, self.pad_length, mode="edge")
+        # start the image chunkning
+        # Co-ordinate system [0,1,2] ~ [X,Y,Z]
         image_chunks = defaultdict()
         chunk_shape = [
             (0, self.image.shape[0]),
@@ -49,7 +57,10 @@ class ImageChunker:
                 if image_chunks
                 else (0, number_of_voxels_in_chunk)
             )
-            if chunk_number == self.number_of_chunks - 1 and self.image.shape[direction] % 2 != 0:
+            if (
+                chunk_number == self.number_of_chunks - 1
+                and self.image.shape[direction] % 2 != 0
+            ):
                 chunk_shape[direction] = (
                     chunk_shape[direction][0],
                     chunk_shape[direction][1] + 1,
@@ -67,6 +78,4 @@ class ImageChunker:
         return image_chunks
 
     def build_image(self) -> np.ndarray:
-
-        return np.ndarray([1,2])
-        return np.ndarray([1,2])
+        return np.ndarray([1, 2])
