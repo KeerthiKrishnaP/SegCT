@@ -31,3 +31,5 @@ lint: ## Run all linters with automated fix
 toml-sort: ## Reorder toml files
 	poetry run toml-sort --all --in-place $(TOML_FILES)
 
+test-image-chunker:
+	poetry run python unit_test/test_image_chunker.py
