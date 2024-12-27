@@ -7,9 +7,7 @@ class TreeNode:
         self.children = []
         self.depth = depth
         self.name = name or f"Chunk_{depth}_{id(self)}"
-        self.start_indices = start_indices or [0] * len(
-            chunk.shape
-        )  # Start indices in parent image
+        self.start_indices = start_indices or [0] * len(chunk.shape)
 
     def is_leaf(self):
         return len(self.children) == 0
