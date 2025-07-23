@@ -1,2 +1,10 @@
 src/datasets/*
 src/saved_model_varibles/*
+
+
+# Ignore all JSON files anywhere
+*.json
+
+
+# Ignore all .tiff files anywhere
+*.tif
