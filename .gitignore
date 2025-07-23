@@ -1,4 +1,5 @@
 src/datasets/*
+src/data/*
 src/saved_model_varibles/*
 
 
