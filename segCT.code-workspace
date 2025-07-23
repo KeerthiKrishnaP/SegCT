@@ -1,0 +1,67 @@
+{
+	"extensions": {
+		"recommendations": [
+			"SonarSource.sonarlint-vscode",
+			"kisstkondoros.vscode-codemetrics",
+			"aaron-bond.better-comments",
+			"njpwerner.autodocstring",
+			"GitHub.copilot",
+			"ms-python.python",
+			"ms-python.vscode-pylance",
+			"charliermarsh.ruff",
+			"ms-toolsai.jupyter",
+			"esbenp.prettier-vscode",
+			"dbaeumer.vscode-eslint",
+			"stylelint.vscode-stylelint",
+			"rust-lang.rust-analyzer",
+			"fill-labs.dependi"
+		],
+		"unwantedRecommendations": []
+	},
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"window.title": "${rootName} - ${activeEditorMedium}",
+		"files.exclude": {
+			"**/.git": true,
+			"**/.svn": true,
+			"**/.hg": true,
+			"**/CVS": true,
+			"**/.DS_Store": true,
+			"**/Thumbs.db": true
+		},
+		"git.autofetch": true,
+		"files.insertFinalNewline": true,
+		"files.trimTrailingWhitespace": true,
+		"editor.formatOnSave": true,
+		"editor.inlineSuggest.enabled": true,
+		"workbench.startupEditor": "none",
+		"python.languageServer": "Pylance",
+		"python.analysis.importFormat": "relative",
+		"python.analysis.inlayHints.functionReturnTypes": true,
+		"python.analysis.typeCheckingMode": "basic",
+		"python.terminal.activateEnvironment": false,
+		"npm.packageManager": "yarn",
+		"typescript.updateImportsOnFileMove.enabled": "always",
+		"[python]": {
+			"editor.defaultFormatter": "charliermarsh.ruff",
+			"editor.formatOnSave": true,
+			"editor.codeActionsOnSave": {
+				"source.fixAll": "explicit",
+				"source.organizeImports": "explicit"
+			}
+		},
+		"[json]": {
+			"editor.defaultFormatter": "esbenp.prettier-vscode"
+		},
+		"[markdown]": {
+			"editor.defaultFormatter": null
+		},
+		"python.analysis.extraPaths": [
+			"./src"
+		],
+	},
+}

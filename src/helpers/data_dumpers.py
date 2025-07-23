@@ -1,7 +1,6 @@
 import json
 import os
 from pathlib import Path
-from typing import Final
 
 import numpy as np
 

@@ -23,6 +23,7 @@ if __name__ == "__main__":
     start_time = time()
     structural_tensor(image=resized_image, window_radius=4)
     end_time = time()
+    end_time = time()
     print("time for processingusing parallel programming", end_p - start_p)
     print("time for processing", end_time - start_time)
     show_3D_stack(parallel_processed_image[0]["S11"])

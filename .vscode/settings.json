@@ -42,5 +42,15 @@
     },
     "[markdown]": {
       "editor.defaultFormatter": null
+    },
+    "python.pythonPath": "${workspaceFolder}/.venv/bin/python",
+    "terminal.integrated.env.linux": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+    },
+    "terminal.integrated.env.windows": {
+        "PYTHONPATH": "${workspaceFolder}\\src"
+    },
+    "terminal.integrated.env.osx": {
+        "PYTHONPATH": "${workspaceFolder}/src"
     }
   }
