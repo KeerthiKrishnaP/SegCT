@@ -135,11 +135,13 @@ class ImageViewer:
             shutil.rmtree(path)
         os.makedirs(path)
         if self.rectangle_coords is not None:
-            start_x, end_x = int(round(self.rectangle_coords[0])), int(
-                round(self.rectangle_coords[2])
+            start_x, end_x = (
+                int(round(self.rectangle_coords[0])),
+                int(round(self.rectangle_coords[2])),
             )
-            start_y, end_y = int(round(self.rectangle_coords[1])), int(
-                round(self.rectangle_coords[3])
+            start_y, end_y = (
+                int(round(self.rectangle_coords[1])),
+                int(round(self.rectangle_coords[3])),
             )
             print(int(self.starting_text_box.text))
             print(self.rectangle_coords)
