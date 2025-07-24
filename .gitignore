@@ -8,3 +8,12 @@ src/saved_model_varibles/*
 
 # Ignore all .tiff files anywhere
 *.tif
+
+# Ignore common Python cache directories
+__pycache__/
+*.py[cod]
+
+# Ignore any generic cache directories
+.cache/
+cache/
+*.log
