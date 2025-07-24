@@ -4,10 +4,10 @@ import numpy as np
 from PIL import Image
 
 
-def load_images_from_folder(folder_path):
+def load_images_from_folder(folder_path: str, format: str):
     image_arrays = []
     tif_files = [
-        filename for filename in os.listdir(folder_path) if filename.endswith(".tif")
+        filename for filename in os.listdir(folder_path) if filename.endswith(format)
     ]
     for filename in sorted(tif_files):
         image_path = os.path.join(folder_path, filename)

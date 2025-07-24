@@ -58,7 +58,7 @@ def structure_anisotropty(strcture_tensor, window_radius) -> np.ndarray:
 
 
 def eigen_values_and_vectors(
-    structure_tensor: dict[str, np.ndarray]
+    structure_tensor: dict[str, np.ndarray],
 ) -> list[tuple[np.ndarray, np.ndarray]]:
     if len(structure_tensor["S11"]) > 0:
         structure_tensor_per_pixel = np.zeros(
@@ -80,7 +80,6 @@ def structural_tensor(
     save: bool = False,
     clear_history: bool = False,
 ) -> dict[str, np.ndarray]:
-
     image = np.pad(
         image,
         (

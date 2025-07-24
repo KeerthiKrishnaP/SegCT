@@ -14,7 +14,7 @@ from visulization.read_image_stack import load_images_from_folder
 if __name__ == "__main__":
     folder_path = "src/datasets/training_sets/Cropped images"
     loaded_images = load_images_from_folder(folder_path)
-    resized_image = image_resize(image=loaded_images, compression_ratio=4)
+    resized_image = image_resize(image=loaded_images, compression_ratio=1)
     start_p = time()
     parallel_processed_image = PrallelProcessImage(
         image=resized_image, window_size=4, operation_name=Operations.CST
