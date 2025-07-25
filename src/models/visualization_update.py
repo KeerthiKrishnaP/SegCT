@@ -99,52 +99,160 @@ class ImageViewer:
             st.pyplot(fig2)
 
 
-class CroppingTool(ImageViewer):
-    def display_crop_page(self):
-        st.title("Cropping Tool")
-        max_idx = len(self.stack) - 1
-        slice_idx = st.slider("Current Slice", 0, max_idx, 0, key="crop_slice")
-        img = self.stack[slice_idx]
-        w, h = img.size
-        st.write("\nDraw a rectangle on the image:")
-        canvas_result = st_canvas(
-            fill_color="rgba(0,0,0,0)",
-            stroke_width=2,
-            background_image=np.array(img),
-            update_streamlit=True,
-            height=h,
-            width=w,
-            drawing_mode="rect",
-            key="canvas",
-        )
+import os
+
+import numpy as np
+import streamlit as st
+import tifffile
+from PIL import Image
+from streamlit_drawable_canvas import st_canvas
+
+
+class StackCropperApp:
+    """
+    Streamlit app for cropping regions from a 3D TIFF image stack.
+    """
+
+    # Mapping of crop categories to output folders
+    CATEGORY_FOLDERS = {
+        "Cropped Image": os.path.join("crops", "cropped_images"),
+        "Warp Yarn": os.path.join("crops", "warp_yarn"),
+        "Weft Yarn": os.path.join("crops", "weft_yarn"),
+        "Void": os.path.join("crops", "void"),
+    }
+
+    def __init__(self):
+        # Ensure output directories exist
+        for folder in self.CATEGORY_FOLDERS.values():
+            os.makedirs(folder, exist_ok=True)
+
+    def load_stack(self, filepath: str) -> np.ndarray:
+        """
+        Load a TIFF stack from the given file path.
+        """
+        return tifffile.imread(filepath)
+
+    def save_crop(
+        self,
+        stack: np.ndarray,
+        bbox: tuple,
+        z_start: int,
+        z_end: int,
+        category: str,
+        base_name: str = "crop",
+    ):
+        """
+        Save cropped slices to the folder matching the category.
+        """
+        x, y, w, h = bbox
+        output_dir = self.CATEGORY_FOLDERS[category]
+
+        for z in range(z_start, z_end + 1):
+            slice_img = stack[z]
+            cropped = slice_img[y : y + h, x : x + w]
+            filename = f"{base_name}_{category.replace(' ', '_')}_z{z}.png"
+            out_path = os.path.join(output_dir, filename)
+            Image.fromarray(cropped).save(out_path)
+
+    def run(self):
+        """
+        Launch the Streamlit interface.
+        """
+        st.set_page_config(page_title="3D Stack Cropper", layout="wide")
+        st.title("3D Image Stack Cropper")
+
+        # Input: path to the TIFF stack
+        filepath = st.text_input("Enter path to 3D TIFF stack")
+
+        if not filepath:
+            st.info("Please provide the path to a TIFF stack to begin.")
+            return
+
+        try:
+            stack = self.load_stack(filepath)
+        except Exception as e:
+            st.error(f"Failed to load stack: {e}")
+            return
+
+        depth, height, width = stack.shape
+
+        # Sidebar controls
+        st.sidebar.header("Slice Navigation")
+        slice_idx = st.sidebar.slider("Select Slice", 0, depth - 1, 0)
+
         st.sidebar.header("Crop Settings")
-        start_slice = st.sidebar.number_input("Start Slice", 0, max_idx, 0)
-        end_slice = st.sidebar.number_input("End Slice", 0, max_idx, max_idx)
-        crop_name = st.sidebar.selectbox("Crop Name", list(CROPPED_PATHS.keys()))
-        if st.sidebar.button("Create Crop"):
-            if not canvas_result.json_data or not canvas_result.json_data.get(
-                "objects"
-            ):
-                st.warning("No rectangle drawn.")
+        z_start = st.sidebar.number_input(
+            "Start Slice", min_value=0, max_value=depth - 1, value=0, step=1
+        )
+        z_end = st.sidebar.number_input(
+            "End Slice", min_value=0, max_value=depth - 1, value=depth - 1, step=1
+        )
+        crop_name = st.sidebar.selectbox(
+            "Crop Name", list(self.CATEGORY_FOLDERS.keys())
+        )
+
+        col1, col2 = st.columns([3, 1])
+
+        with col1:
+            st.subheader(f"Slice {slice_idx} of {depth - 1}")
+            img = stack[slice_idx]
+            img_pil = Image.fromarray(img)
+
+            # Cropping mode toggles
+            if st.button("Start Cropping"):
+                st.session_state.mode = "draw"
+            if st.button("End Cropping"):
+                st.session_state.mode = "view"
+
+            canvas = st_canvas(
+                fill_color="rgba(255, 0, 0, 0.3)",
+                stroke_width=2,
+                stroke_color="#FF0000",
+                background_image=img_pil,
+                update_streamlit=True,
+                drawing_mode=(
+                    "rectangle"
+                    if st.session_state.get("mode") == "draw"
+                    else "transform"
+                ),
+                height=height,
+                width=width,
+                key="canvas",
+            )
+
+        with col2:
+            st.subheader("Create Crop")
+
+            if canvas.json_data and canvas.json_data.get("objects"):
+                # Use the first rectangle drawn
+                obj = canvas.json_data["objects"][0]
+                left = int(obj["left"])
+                top = int(obj["top"])
+                w_box = int(obj["width"])
+                h_box = int(obj["height"])
+
+                st.write(f"BBox: x={left}, y={top}, w={w_box}, h={h_box}")
+
+                if st.button("Create Crop"):
+                    base = os.path.splitext(os.path.basename(filepath))[0]
+                    self.save_crop(
+                        stack,
+                        (left, top, w_box, h_box),
+                        int(z_start),
+                        int(z_end),
+                        crop_name,
+                        base_name=base,
+                    )
+                    st.success(f"Saved '{crop_name}' from slices {z_start} to {z_end}.")
             else:
-                obj = canvas_result.json_data["objects"][0]
-                left, top = int(obj["left"]), int(obj["top"])
-                width, height = int(obj["width"]), int(obj["height"])
-                dest_dir = CROPPED_PATHS[crop_name]
-                os.makedirs(dest_dir, exist_ok=True)
-                for i in range(start_slice, end_slice + 1):
-                    slice_img = self.stack[i]
-                    cropped = slice_img.crop((left, top, left + width, top + height))
-                    out_path = os.path.join(dest_dir, f"{crop_name}_{i}.png")
-                    cropped.save(out_path)
-                st.success(
-                    f"Saved crops for slices {start_slice}-{end_slice} in '{dest_dir}'."
+                st.info(
+                    "Draw a rectangle on the image and click 'End Cropping' to enable saving."
                 )
 
 
 def main():
     images = load_images_from_folder(RAW_DATA, format=".tif")
-    viewer = CroppingTool(images)
+    viewer = StackCropperApp(images)
     page = st.sidebar.radio("Select Page", ["Viewer", "Cropping Tool"])
     if page == "Viewer":
         viewer.display_viewer()
