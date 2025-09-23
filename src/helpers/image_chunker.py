@@ -1,81 +1,102 @@
-from collections import defaultdict
+from typing import Any
 
 import numpy as np
+from numpy import intp
 
 
-class ImageChunker:
-    def __init__(
-        self,
-        image: np.ndarray,
-        number_of_chunks: int | None,
-        pad_length: int | None,
-    ) -> None:
-        self.image = image
-        self.number_of_chunks = self.check_number_of_chunks(number_of_chunks)
-        self.pad_length = self.check_pad_length(pad_length)
-        self.chunks: dict[str, np.ndarray] = self.make_image_to_chunks()
+def chunk_image_with_overlap(
+    image: np.ndarray, num_chunks: int = None, overlap: int = 10
+):
+    """
+    Split an image into chunks along its largest axis with overlapping regions.
+    Chunk size is computed automatically based on the smallest axis.
 
-    def check_pad_length(self, pad_length: int | None) -> int:
-        if pad_length is not None:
-            return pad_length
-        print(
-            "Warning: Additional information not provided. Using default value for Pad = 6."
-        )
-        return 6
+    Parameters
+    ----------
+    image : np.ndarray
+        Input image (2D or 3D, e.g. grayscale or RGB).
+    num_chunks : int, optional
+        Number of chunks to split along the largest axis.
+        If None, the number of chunks is set to the ratio of largest/smallest axis.
+    overlap : int
+        Number of pixels to overlap between consecutive chunks.
 
-    def check_number_of_chunks(self, number_of_chunks: int | None) -> int:
-        if number_of_chunks is not None:
-            return number_of_chunks
-        print(
-            "Warning: Additional information not provided. Using default value for Number of chunks = 4."
-        )
-        return 4
+    Returns
+    -------
+    chunks : list of np.ndarray
+        List of overlapping image chunks.
+    positions : list of tuple
+        Each tuple is (start, end) index along the split axis.
+    split_axis : int
+        The axis along which the image was split.
+    """
+    # Determine split axis
+    split_axis = np.argmax(image.shape[:2])  # 0=height, 1=width
+    axis_len = image.shape[split_axis]
+    other_axis_len = image.shape[1 - split_axis]
 
-    def make_image_to_chunks(self) -> dict[str, np.ndarray]:
-        direction = np.argmax(self.image.shape)
-        number_of_voxels_in_chunk = int(
-            self.image.shape[direction] / self.number_of_chunks
-        )
-        # pad the image boundaries to avoid the conflits while chunking
-        self.image = np.pad(self.image, self.pad_length, mode="edge")
-        # start the image chunkning
-        # Co-ordinate system [0,1,2] ~ [X,Y,Z]
-        image_chunks = defaultdict()
-        chunk_shape = [
-            (0, self.image.shape[0]),
-            (0, self.image.shape[1]),
-            (0, self.image.shape[2]),
-        ]
+    # Compute number of chunks if not given
+    if num_chunks is None:
+        num_chunks = max(1, int(np.ceil(axis_len / other_axis_len)))
 
-        for chunk_number in range(self.number_of_chunks):
-            chunk_shape[direction] = (
-                (
-                    image_chunks[str(chunk_number)].shape[direction],
-                    image_chunks[str(chunk_number)].shape[direction]
-                    + number_of_voxels_in_chunk,
-                )
-                if image_chunks
-                else (0, number_of_voxels_in_chunk)
-            )
-            if (
-                chunk_number == self.number_of_chunks - 1
-                and self.image.shape[direction] % 2 != 0
-            ):
-                chunk_shape[direction] = (
-                    chunk_shape[direction][0],
-                    chunk_shape[direction][1] + 1,
-                )
-            image_chunks[str(chunk_number + 1)] = np.pad(
-                self.image[
-                    chunk_shape[0][0] : chunk_shape[0][1],
-                    chunk_shape[1][0] : chunk_shape[1][1],
-                    chunk_shape[2][0] : chunk_shape[2][1],
-                ],
-                self.pad_length,
-                mode="edge",
-            )
+    # Compute chunk size (excluding overlap)
+    chunk_size = int(np.ceil(axis_len / num_chunks))
 
-        return image_chunks
+    chunks = []
+    positions = []
 
-    def build_image(self) -> np.ndarray:
-        return np.ndarray([1, 2])
+    start = 0
+    while start < axis_len:
+        end = min(start + chunk_size, axis_len)
+
+        if split_axis == 0:  # along height
+            chunk = image[max(0, start - overlap) : min(axis_len, end + overlap), :]
+        else:  # along width
+            chunk = image[:, max(0, start - overlap) : min(axis_len, end + overlap)]
+
+        chunks.append(chunk)
+        positions.append((start, end))
+        start += chunk_size
+
+    return chunks, positions, split_axis
+
+
+def stitch_chunks(chunks, positions, split_axis, image_shape):
+    """
+    Stitch back the processed chunks into a full image.
+
+    Assumes processing did not change shape of each chunk, except possibly at overlap edges.
+
+    Parameters
+    ----------
+    chunks : list of np.ndarray
+        List of processed chunks.
+    positions : list of tuple
+        Original (start, end) positions of each chunk.
+    split_axis : int
+        Axis along which the image was split.
+    image_shape : tuple
+        Shape of the full image.
+
+    Returns
+    -------
+    stitched : np.ndarray
+        The reconstructed image.
+    """
+    stitched = np.zeros(image_shape, dtype=chunks[0].dtype)
+
+    for chunk, (start, end) in zip(chunks, positions):
+        if split_axis == 0:  # height split
+            stitched[start:end, :] = chunk[
+                (chunk.shape[0] - (end - start)) // 2 : (chunk.shape[0] + (end - start))
+                // 2,
+                :,
+            ]
+        else:  # width split
+            stitched[:, start:end] = chunk[
+                :,
+                (chunk.shape[1] - (end - start)) // 2 : (chunk.shape[1] + (end - start))
+                // 2,
+            ]
+
+    return stitched

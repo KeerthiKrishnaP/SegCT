@@ -2,6 +2,7 @@ import base64
 import importlib
 import io
 import os
+import shutil
 
 import numpy as np
 import streamlit as st
@@ -39,7 +40,7 @@ class Cropper:
         self.image_stack = image_stack
         self.save_dir = save_dir
         self.prefix = prefix
-        self.crop_dir = os.path.join(save_dir, "crops")
+        self.crop_dir = os.path.join(save_dir, "crops", "data_stack")
         os.makedirs(self.crop_dir, exist_ok=True)
 
     def select_slice(self):
@@ -70,7 +71,7 @@ class Cropper:
         for i in range(start_idx, end_idx + 1):
             img = Image.fromarray(self.image_stack[i])
             cropped = img.crop((x, y, x + w, y + h))
-            filename = f"cropped_slice{i}.png"
+            filename = f"cropped_slice{i}.tiff"
             save_path = os.path.join(self.crop_dir, filename)
             cropped.save(save_path)
         st.success(f"Saved cropped images {start_idx} → {end_idx} to {self.crop_dir}")
@@ -109,6 +110,78 @@ class Cropper:
                 self.crop_all((x, y, w, h), int(start_idx), int(end_idx))
             else:
                 st.warning("Please draw a rectangle before cropping.")
+
+
+def page1_crop_images():
+    st.header("Load & Crop Images")
+
+    # --- Choose mode: create or load ---
+    mode = st.radio(
+        "Choose option:",
+        ["Create New Working Directory", "Load Existing Working Directory"],
+        key="page1_mode_radio",
+    )
+
+    working_dir = None
+
+    if mode == "Create New Working Directory":
+        base_dir = st.text_input(
+            "Enter base path:",
+            os.path.expanduser("~"),
+            key="page1_base_dir_input",
+        )
+
+        new_dir_name = st.text_input(
+            "Enter a name for the working directory:",
+            "working_output",
+            key="page1_new_dir_name_input",
+        )
+        working_dir = os.path.join(base_dir, new_dir_name)
+        if os.path.exists(working_dir):
+            st.warning("Directory already exists. Its being overwritten.")
+        if st.button("Create Working Directory", key="page1_create_dir_button"):
+            if os.path.exists(working_dir) and os.path.isdir(working_dir):
+                shutil.rmtree(working_dir)
+            os.makedirs(working_dir)
+            st.session_state["working_dir"] = working_dir
+            st.success(
+                f"Created working directory: {os.path.abspath(working_dir)}", icon="📁"
+            )
+
+    elif mode == "Load Existing Working Directory":
+        existing_dir = st.text_input(
+            "Enter path to existing working directory:",
+            key="page1_existing_dir_input",
+        )
+
+        if st.button("Load Working Directory", key="page1_load_dir_button"):
+            if os.path.exists(existing_dir) and os.path.isdir(existing_dir):
+                working_dir = existing_dir
+                st.session_state["working_dir"] = working_dir
+                st.success(
+                    f"Loaded working directory: {os.path.abspath(working_dir)}",
+                    icon="📂",
+                )
+            else:
+                st.error("❌ The path does not exist or is not a directory.")
+
+    if "working_dir" in st.session_state:
+        uploaded_files = st.file_uploader(
+            "Upload image stack",
+            type=["png", "jpg", "jpeg", "tif", "tiff"],
+            accept_multiple_files=True,
+            key="page1_file_uploader",
+        )
+
+        if uploaded_files:
+            image_list = [np.array(Image.open(f).convert("L")) for f in uploaded_files]
+            image_stack = np.stack(image_list, axis=0)
+            cropper = Cropper(
+                image_stack, st.session_state["working_dir"], prefix="page1_cropper"
+            )
+            cropper.run()
+    else:
+        st.info("Please create or load a working directory first.", icon="ℹ️")
 
 
 class RectAnnotator:
@@ -218,16 +291,78 @@ class RectAnnotator:
 
 
 def load_cropped_images(save_dir):
-    crop_dir = os.path.join(save_dir, "crops")
+    crop_dir = os.path.join(save_dir, "crops", "data_stack")
     if not os.path.exists(crop_dir):
         return None
-    files = sorted([f for f in os.listdir(crop_dir) if f.endswith(".png")])
+    files = sorted([f for f in os.listdir(crop_dir) if f.endswith(".tiff")])
     if not files:
         return None
     image_list = [
         np.array(Image.open(os.path.join(crop_dir, f)).convert("L")) for f in files
     ]
     return np.stack(image_list, axis=0)
+
+
+def computations_page():
+    st.header("Segmentation and Computations")
+
+    if "working_dir" not in st.session_state:
+        st.warning("Please create a working directory in Page 1 first.")
+        return
+
+    base_dir = st.session_state["working_dir"]
+
+    # Step 1: Browse dataset
+    dataset_path = st.text_input(
+        "Enter dataset path (relative to working directory):",
+        key="page3_dataset_path_input",
+    )
+
+    full_path = os.path.join(base_dir, dataset_path)
+    if not os.path.exists(full_path):
+        st.warning("Dataset path not found. Example: warp/1 or crops/")
+        return
+
+    # Step 2: Select computation type
+    comp_type = st.selectbox(
+        "Choose computation to run:",
+        [
+            "Structural Tensor",
+            "Average Gray Value (coming soon)",
+            "Azimuthal Angle (coming soon)",
+        ],
+        key="page3_comp_type",
+    )
+
+    if comp_type == "Structural Tensor":
+        st.subheader("Structural Tensor Parameters")
+
+        # Step 3: User inputs
+        window_radius = st.number_input(
+            "Window radius:", min_value=1, value=5, key="page3_window_radius"
+        )
+        window_size = st.number_input(
+            "Window size:", min_value=1, value=15, key="page3_window_size"
+        )
+        filename = st.text_input(
+            "Output file name prefix:", "struct_tensor", key="page3_output_filename"
+        )
+        parallel = st.checkbox(
+            "Run in parallel?", value=False, key="page3_parallel_flag"
+        )
+
+        # Step 4: Run computation
+        if st.button("Run Computation", key="page3_run_button"):
+            st.info(f"Running Structural Tensor computation on {dataset_path} ...")
+
+            results_dir = os.path.join(full_path, "results_structural_tensor")
+            os.makedirs(results_dir, exist_ok=True)
+
+            # 🔗 Call to backend function (to be implemented in your source code)
+            # compute_structural_tensor(full_path, window_radius, window_size, parallel, results_dir, filename)
+
+            # Placeholder
+            st.success(f"✅ Structural Tensor results saved in {results_dir}")
 
 
 # ───────────────────────────────────────────
@@ -242,7 +377,9 @@ def main():
         [
             "Page 1: Crop Images",
             "Page 2: Annotate ROIs",
-            "Page 3: Segmentation & Stats",
+            "Page 3: Computations",
+            "Page 4: Segmentation & Stats",
+            "Page 5: Viewer",
         ],
         key="sidebar_nav_radio",
     )
@@ -251,49 +388,7 @@ def main():
     # Page 1: Crop images
     if page == "Page 1: Crop Images":
         st.header("Load & Crop Images")
-
-        # Step 1: Set or create working directory
-        base_dir = st.text_input(
-            "Enter base path where you want to create the working directory:",
-            os.path.expanduser("~"),
-            key="page1_base_dir_input",
-        )
-
-        new_dir_name = st.text_input(
-            "Enter a name for the working directory:",
-            "working_output",
-            key="page1_new_dir_name_input",
-        )
-
-        if st.button("Create Working Directory", key="page1_create_dir_button"):
-            working_dir = os.path.join(base_dir, new_dir_name)
-            os.makedirs(working_dir, exist_ok=True)
-            st.session_state["working_dir"] = working_dir
-            st.success(
-                f"Working directory set: {os.path.abspath(working_dir)}", icon="📁"
-            )
-
-        # Step 2: Upload and crop images
-        if "working_dir" in st.session_state:
-            uploaded_files = st.file_uploader(
-                "Upload image stack",
-                type=["png", "jpg", "jpeg", "tif", "tiff"],
-                accept_multiple_files=True,
-                key="page1_file_uploader",
-            )
-            if uploaded_files:
-                image_list = [
-                    np.array(Image.open(f).convert("L")) for f in uploaded_files
-                ]
-                image_stack = np.stack(image_list, axis=0)
-
-                cropper = Cropper(
-                    image_stack, st.session_state["working_dir"], prefix="page1_cropper"
-                )
-                cropper.run()
-        else:
-            st.info("Please create a working directory first.", icon="ℹ️")
-
+        page1_crop_images()
     # ───────────────────────────────────────
     elif page == "Page 2: Annotate ROIs":
         st.header("Annotate Regions of Interest")
@@ -313,9 +408,19 @@ def main():
             )
             annotator.run()
 
-    elif page == "Page 3: Segmentation & Stats":
+    elif page == "Page 3: Computations":
+        st.header(
+            "Compute parameters that will be subsequently be used for segmentation"
+        )
+        computations_page()
+
+    elif page == "Page 4: Segmentation & Stats":
         st.header("Segmentation and Analysis")
         st.info("This page will run segmentation and show stats/plots (coming soon).")
+
+    elif page == "Page 5: Viewer":
+        st.header("View 3D Stack and plots histograms")
+        st.info("(coming soon).")
 
 
 if __name__ == "__main__":
