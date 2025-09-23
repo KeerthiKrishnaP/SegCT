@@ -52,5 +52,8 @@
     },
     "terminal.integrated.env.osx": {
         "PYTHONPATH": "${workspaceFolder}/src"
-    }
+    },
+    "cSpell.words": [
+      "paceholders"
+    ]
   }

@@ -303,41 +303,61 @@ def load_cropped_images(save_dir):
     return np.stack(image_list, axis=0)
 
 
+def is_nonempty_dir(path):
+    return os.path.exists(path) and os.path.isdir(path) and len(os.listdir(path)) > 0
+
+
+def load_structural_tensor_images(results_dir, slice_idx):
+    """Load S11...S23 images for a given slice if they exist."""
+    comps = ["S11", "S22", "S33", "S12", "S13", "S23"]
+    images = {}
+    for comp in comps:
+        comp_dir = os.path.join(results_dir, comp)
+        if os.path.exists(comp_dir):
+            fname = f"{comp}_slice{slice_idx}.png"
+            fpath = os.path.join(comp_dir, fname)
+            if os.path.exists(fpath):
+                images[comp] = Image.open(fpath)
+    return images
+
+
 def computations_page():
     st.header("Segmentation and Computations")
 
     if "working_dir" not in st.session_state:
-        st.warning("Please create a working directory in Page 1 first.")
+        st.warning("Please create or load a working directory in Page 1 first.")
         return
 
     base_dir = st.session_state["working_dir"]
 
-    # Step 1: Browse dataset
+    # Browse dataset
     dataset_path = st.text_input(
         "Enter dataset path (relative to working directory):",
         key="page3_dataset_path_input",
     )
-
     full_path = os.path.join(base_dir, dataset_path)
     if not os.path.exists(full_path):
         st.warning("Dataset path not found. Example: warp/1 or crops/")
         return
 
-    # Step 2: Select computation type
+    # Results check
+    struct_dir = os.path.join(full_path, "results_structural_tensor")
+    struct_done = is_nonempty_dir(struct_dir)
+
+    # Choose computation
     comp_type = st.selectbox(
         "Choose computation to run:",
         [
-            "Structural Tensor",
+            f"Structural Tensor {'✅' if struct_done else ''}",
             "Average Gray Value (coming soon)",
             "Azimuthal Angle (coming soon)",
         ],
         key="page3_comp_type",
     )
 
-    if comp_type == "Structural Tensor":
+    # Structural Tensor UI
+    if "Structural Tensor" in comp_type:
         st.subheader("Structural Tensor Parameters")
-
-        # Step 3: User inputs
         window_radius = st.number_input(
             "Window radius:", min_value=1, value=5, key="page3_window_radius"
         )
@@ -351,18 +371,41 @@ def computations_page():
             "Run in parallel?", value=False, key="page3_parallel_flag"
         )
 
-        # Step 4: Run computation
         if st.button("Run Computation", key="page3_run_button"):
             st.info(f"Running Structural Tensor computation on {dataset_path} ...")
+            os.makedirs(struct_dir, exist_ok=True)
 
-            results_dir = os.path.join(full_path, "results_structural_tensor")
-            os.makedirs(results_dir, exist_ok=True)
+            # 🔗 Placeholder for backend computation
+            # compute_structural_tensor(full_path, window_radius, window_size, parallel, struct_dir, filename)
 
-            # 🔗 Call to backend function (to be implemented in your source code)
-            # compute_structural_tensor(full_path, window_radius, window_size, parallel, results_dir, filename)
+            st.success(f"✅ Structural Tensor results saved in {struct_dir}")
 
-            # Placeholder
-            st.success(f"✅ Structural Tensor results saved in {results_dir}")
+        # If results exist → visualization
+        if struct_done:
+            st.markdown("### Structural Tensor Results")
+            # Assume each component folder has images like S11_slice0.png
+            sample_comp = os.path.join(struct_dir, "S11")
+            if os.path.exists(sample_comp):
+                slice_files = [f for f in os.listdir(sample_comp) if f.endswith(".png")]
+                if slice_files:
+                    max_idx = len(slice_files) - 1
+                    slice_idx = st.slider(
+                        "Select slice", 0, max_idx, 0, key="page3_slice_slider"
+                    )
+
+                    images = load_structural_tensor_images(struct_dir, slice_idx)
+
+                    if images:
+                        cols = st.columns(len(images))
+                        for i, (comp, img) in enumerate(images.items()):
+                            with cols[i]:
+                                st.image(
+                                    img,
+                                    caption=f"{comp} - slice {slice_idx}",
+                                    use_container_width=True,
+                                )
+                    else:
+                        st.info("No images found for selected slice.")
 
 
 # ───────────────────────────────────────────
