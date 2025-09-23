@@ -9,6 +9,8 @@ import streamlit as st
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 
+from src.computations.comput_features import parallel_structural_tensor
+
 # ───────────────────────────────────────────
 # Patch to use image_to_url for canvas background
 _st_image_mod = importlib.import_module("streamlit.elements.image")
@@ -303,6 +305,18 @@ def load_cropped_images(save_dir):
     return np.stack(image_list, axis=0)
 
 
+def load_images(dir):
+    if not os.path.exists(dir):
+        return None
+    files = sorted([f for f in os.listdir(dir) if f.endswith(".tiff")])
+    if not files:
+        return None
+    image_list = [
+        np.array(Image.open(os.path.join(dir, f)).convert("L")) for f in files
+    ]
+    return np.stack(image_list, axis=0)
+
+
 def is_nonempty_dir(path):
     return os.path.exists(path) and os.path.isdir(path) and len(os.listdir(path)) > 0
 
@@ -321,6 +335,13 @@ def load_structural_tensor_images(results_dir, slice_idx):
     return images
 
 
+def check_and_create_dir(path) -> None:
+    if os.path.exists(path):
+        shutil.rmtree(path)
+        st.info(f"Overwriting existing directory: {path}")
+        os.makedirs(path)
+
+
 def computations_page():
     st.header("Segmentation and Computations")
 
@@ -335,77 +356,115 @@ def computations_page():
         "Enter dataset path (relative to working directory):",
         key="page3_dataset_path_input",
     )
-    full_path = os.path.join(base_dir, dataset_path)
-    if not os.path.exists(full_path):
+    data_path = os.path.join(base_dir, dataset_path)
+    if not os.path.exists(data_path):
         st.warning("Dataset path not found. Example: warp/1 or crops/")
         return
 
     # Results check
-    struct_dir = os.path.join(full_path, "results_structural_tensor")
-    struct_done = is_nonempty_dir(struct_dir)
+    results_struct_dir = os.path.join(base_dir, "results_structural_tensor")
+    results_average_gray_value_dir = os.path.join(
+        base_dir, "results_average_gray_value"
+    )
+    results_azmital_angle_dir = os.path.join(base_dir, "results_azimuthal_angle")
+
+    results_struct_done = is_nonempty_dir(results_struct_dir)
+    results_average_gray_value_done = is_nonempty_dir(results_average_gray_value_dir)
+    results_azmital_angle_done = is_nonempty_dir(results_azmital_angle_dir)
 
     # Choose computation
     comp_type = st.selectbox(
         "Choose computation to run:",
         [
-            f"Structural Tensor {'✅' if struct_done else ''}",
-            "Average Gray Value (coming soon)",
-            "Azimuthal Angle (coming soon)",
+            f"Structural Tensor {'✅' if results_struct_done else ''}",
+            f"Average Gray Value {'✅' if results_average_gray_value_done else ''}",
+            f"Azimuthal Angle {'✅' if results_azmital_angle_done else ''}",
         ],
         key="page3_comp_type",
     )
 
+    # Common params
+    st.write("### Common Parameters")
+    window_radius = st.number_input(
+        "Window radius:", min_value=1, value=5, key="page3_window_radius"
+    )
+    window_size = st.number_input(
+        "Window size:", min_value=1, value=15, key="page3_window_size"
+    )
+    parallel = st.checkbox("Run in parallel?", value=False, key="page3_parallel_flag")
+    st.info(f"Dataset loaded from {dataset_path} ...")
+    image = load_images(data_path)
+
+    if image is None:
+        st.error("No cropped images found in the dataset path.")
+        return
     # Structural Tensor UI
-    if "Structural Tensor" in comp_type:
-        st.subheader("Structural Tensor Parameters")
-        window_radius = st.number_input(
-            "Window radius:", min_value=1, value=5, key="page3_window_radius"
-        )
-        window_size = st.number_input(
-            "Window size:", min_value=1, value=15, key="page3_window_size"
-        )
-        filename = st.text_input(
-            "Output file name prefix:", "struct_tensor", key="page3_output_filename"
-        )
-        parallel = st.checkbox(
-            "Run in parallel?", value=False, key="page3_parallel_flag"
-        )
+    match comp_type:
+        case "Structural Tensor":
+            st.subheader("Structural Tensor Computation")
+            if st.button("Run Computation", key="page3_run_button"):
+                # Run computation
+                st.info(f"Running Structural Tensor computation on {dataset_path} ...")
+                results = parallel_structural_tensor(image, window_size, parallel)
+                # Save results
+                for components, components_image_array in results.items():
+                    components_dir = os.path.join(results_struct_dir, components)
+                    os.makedirs(components, exist_ok=True)
+                    for i in range(components_image_array.shape[0]):  # save each slice
+                        img = Image.fromarray(
+                            (components_image_array[i] * 255).astype(np.uint8)
+                        )
+                        fname = f"{components}_slice{i}.png"
+                        img.save(os.path.join(components_dir, fname))
+                st.success(
+                    f"✅ Structural Tensor results saved in {results_struct_dir}"
+                )
 
-        if st.button("Run Computation", key="page3_run_button"):
-            st.info(f"Running Structural Tensor computation on {dataset_path} ...")
-            os.makedirs(struct_dir, exist_ok=True)
+            # If results exist → visualization
+            if results_struct_done:
+                st.markdown("### Structural Tensor Results")
+                sample_comp = os.path.join(results_struct_dir, "S11")
+                if os.path.exists(sample_comp):
+                    if slice_files := [
+                        f for f in os.listdir(sample_comp) if f.endswith(".png")
+                    ]:
+                        max_idx = len(slice_files) - 1
+                        slice_idx = st.slider(
+                            "Select slice", 0, max_idx, 0, key="page3_slice_slider"
+                        )
+                        if images := load_structural_tensor_images(
+                            results_struct_dir, slice_idx
+                        ):
+                            cols = st.columns(len(images))
+                            for i, (comp, img) in enumerate(images.items()):
+                                with cols[i]:
+                                    st.image(
+                                        img,
+                                        caption=f"{comp} - slice {slice_idx}",
+                                        use_container_width=True,
+                                    )
+                        else:
+                            st.info("No images found for selected slice.")
+        case "Average Gray Value":
+            st.info("Average Gray Value computation")
+            if st.button("Run Computation", key="page3_run_button"):
+                st.info(f"Running Average Gray Value computation on {dataset_path} ...")
+                # Run computation
+                # results = average_gray_value(image, window_size)
+                # Save results
+                # comp_dir = os.path.join(results_average_gray_value_dir, "AverageGrayValue")
+                # os.makedirs(comp_dir, exist_ok=True)
+                # for i in range(results.shape[0]):  # save each slice
+                #     img = Image.fromarray((results[i] * 255).astype(np.uint8))
+                #     fname = f"AverageGrayValue_slice{i}.png"
+                #     img.save(os.path.join(comp_dir, fname))
 
-            # 🔗 Placeholder for backend computation
-            # compute_structural_tensor(full_path, window_radius, window_size, parallel, struct_dir, filename)
+                st.success(
+                    f"✅ Average Gray Value results saved in {results_average_gray_value_dir}"
+                )
 
-            st.success(f"✅ Structural Tensor results saved in {struct_dir}")
-
-        # If results exist → visualization
-        if struct_done:
-            st.markdown("### Structural Tensor Results")
-            # Assume each component folder has images like S11_slice0.png
-            sample_comp = os.path.join(struct_dir, "S11")
-            if os.path.exists(sample_comp):
-                slice_files = [f for f in os.listdir(sample_comp) if f.endswith(".png")]
-                if slice_files:
-                    max_idx = len(slice_files) - 1
-                    slice_idx = st.slider(
-                        "Select slice", 0, max_idx, 0, key="page3_slice_slider"
-                    )
-
-                    images = load_structural_tensor_images(struct_dir, slice_idx)
-
-                    if images:
-                        cols = st.columns(len(images))
-                        for i, (comp, img) in enumerate(images.items()):
-                            with cols[i]:
-                                st.image(
-                                    img,
-                                    caption=f"{comp} - slice {slice_idx}",
-                                    use_container_width=True,
-                                )
-                    else:
-                        st.info("No images found for selected slice.")
+        case "Azimuthal Angle":
+            st.info("Azimuthal Angle computation coming soon.")
 
 
 # ───────────────────────────────────────────

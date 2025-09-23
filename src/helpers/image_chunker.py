@@ -2,44 +2,45 @@ from typing import Any
 
 import numpy as np
 from numpy import intp
+from numpy._typing import NDArray
 
 
 def chunk_image_with_overlap(
-    image: np.ndarray, num_chunks: int = None, overlap: int = 10
-):
+    image: np.ndarray, overlap: int = 10
+) -> tuple[list[Any], list[tuple[int, int]], int]:
     """
-    Split an image into chunks along its largest axis with overlapping regions.
-    Chunk size is computed automatically based on the smallest axis.
+    Split an image (2D or 3D) into overlapping chunks along its longest dimension.
+
+    - Number of chunks is computed automatically.
+    - Each chunk length >= shortest dimension.
+    - The last chunk may be longer if needed.
 
     Parameters
     ----------
     image : np.ndarray
-        Input image (2D or 3D, e.g. grayscale or RGB).
-    num_chunks : int, optional
-        Number of chunks to split along the largest axis.
-        If None, the number of chunks is set to the ratio of largest/smallest axis.
+        Input array (2D or 3D, e.g. grayscale or volumetric).
     overlap : int
-        Number of pixels to overlap between consecutive chunks.
+        Number of voxels/pixels to overlap between consecutive chunks.
 
     Returns
     -------
-    chunks : list of np.ndarray
+    chunks : list[np.ndarray]
         List of overlapping image chunks.
-    positions : list of tuple
-        Each tuple is (start, end) index along the split axis.
+    positions : list[tuple[int, int]]
+        Start and end indices (along split axis) of each chunk.
     split_axis : int
-        The axis along which the image was split.
+        Axis along which the image was split.
     """
-    # Determine split axis
-    split_axis = np.argmax(image.shape[:2])  # 0=height, 1=width
+    # identify split axis
+    shape = image.shape[:2] if image.ndim > 2 else image.shape
+    split_axis = int(np.argmax(shape))  # longest axis
+    other_axis = int(np.argmin(shape))  # shortest axis
+
     axis_len = image.shape[split_axis]
-    other_axis_len = image.shape[1 - split_axis]
+    min_len = image.shape[other_axis]
 
-    # Compute number of chunks if not given
-    if num_chunks is None:
-        num_chunks = max(1, int(np.ceil(axis_len / other_axis_len)))
-
-    # Compute chunk size (excluding overlap)
+    # compute number of chunks
+    num_chunks = int(np.ceil(axis_len / min_len))
     chunk_size = int(np.ceil(axis_len / num_chunks))
 
     chunks = []
@@ -49,10 +50,10 @@ def chunk_image_with_overlap(
     while start < axis_len:
         end = min(start + chunk_size, axis_len)
 
-        if split_axis == 0:  # along height
-            chunk = image[max(0, start - overlap) : min(axis_len, end + overlap), :]
-        else:  # along width
-            chunk = image[:, max(0, start - overlap) : min(axis_len, end + overlap)]
+        if split_axis == 0:  # split along height
+            chunk = image[max(0, start - overlap) : min(axis_len, end + overlap), ...]
+        else:  # split along width
+            chunk = image[..., max(0, start - overlap) : min(axis_len, end + overlap)]
 
         chunks.append(chunk)
         positions.append((start, end))
@@ -61,7 +62,7 @@ def chunk_image_with_overlap(
     return chunks, positions, split_axis
 
 
-def stitch_chunks(chunks, positions, split_axis, image_shape):
+def stitch_chunks(chunks, positions, split_axis, image_shape) -> NDArray:
     """
     Stitch back the processed chunks into a full image.
 
