@@ -1,6 +1,7 @@
 import itertools
 
 import numpy as np
+from numpy.typing import NDArray
 from pydantic import NonNegativeInt
 from scipy.ndimage import convolve
 from skimage.transform import resize
@@ -8,7 +9,7 @@ from skimage.transform import resize
 from computations.helpers import parallel_compute_eigen
 
 
-def average_gray_value(image, window_radius) -> np.ndarray:
+def average_gray_value(image, window_radius) -> NDArray:
     weights = np.ones(
         (
             2 * window_radius + 1,

@@ -12,7 +12,10 @@ from helpers.streamlit_app.streamlit_image_loader import (
     load_images_from_dir,
     show_component_images,
 )
-from src.computations.comput_features import parallel_structural_tensor
+from src.computations.comput_features import (
+    compute_average_gray_value,
+    compute_structural_tensor,
+)
 
 
 # ───────────────────────────────────────────
@@ -222,29 +225,46 @@ def computations_page():
         ["Structural Tensor", "Average Gray Value", "Azimuthal Angle"],
     )
     window_size = st.number_input("Window size:", min_value=1, value=15)
+    window_radius = st.number_input("Window radius:", min_value=1, value=15)
     parallel = st.checkbox("Run in parallel?", value=False)
 
     image = load_images_from_dir(data_path)
+
     if image is None:
         st.error("No cropped images found in dataset path.")
         return
+    match comp_type:
+        case "Structural Tensor":
+            st.subheader("Structural Tensor Computation")
+            if st.button("Run Computation"):
+                results = compute_structural_tensor(image, window_size, parallel)
+                for comp, arr in results.items():
+                    comp_dir = os.path.join(results_struct_dir, comp)
+                    os.makedirs(comp_dir, exist_ok=True)
+                    for i in range(arr.shape[0]):
+                        img = Image.fromarray((arr[i] * 255).astype(np.uint8))
+                        img.save(os.path.join(comp_dir, f"{comp}_slice{i}.png"))
+                st.success(f"Results saved in {results_struct_dir}")
 
-    if comp_type == "Structural Tensor":
-        st.subheader("Structural Tensor Computation")
-        if st.button("Run Computation"):
-            results = parallel_structural_tensor(image, window_size, parallel)
-            for comp, arr in results.items():
-                comp_dir = os.path.join(results_struct_dir, comp)
-                os.makedirs(comp_dir, exist_ok=True)
-                for i in range(arr.shape[0]):
-                    img = Image.fromarray((arr[i] * 255).astype(np.uint8))
-                    img.save(os.path.join(comp_dir, f"{comp}_slice{i}.png"))
-            st.success(f"Results saved in {results_struct_dir}")
-
-        if results_struct_done:
-            slice_idx = st.slider("Select slice", 0, image.shape[0] - 1, 0)
-            images = load_structural_tensor_images(results_struct_dir, slice_idx)
-            show_component_images(images, slice_idx)
+            if results_struct_done:
+                slice_idx = st.slider("Select slice", 0, image.shape[0] - 1, 0)
+                images = load_structural_tensor_images(results_struct_dir, slice_idx)
+                show_component_images(images, slice_idx)
+        case "Average Gray Value":
+            st.subheader("Average Gray Value Computation")
+            if st.button("Run Computation"):
+                average_gray_value = compute_average_gray_value(
+                    image, window_radius, parallel
+                )
+                if average_gray_value is not None:
+                    avg_dir = os.path.join(base_dir, "results_average_gray_value")
+                    os.makedirs(avg_dir, exist_ok=True)
+                    for i in range(average_gray_value.shape[0]):
+                        img = Image.fromarray((average_gray_value[i]).astype(np.uint32))
+                        img.save(os.path.join(avg_dir, f"avg_gray_slice{i}.png"))
+                    st.success(f"Results saved in {avg_dir}")
+                else:
+                    st.error("Average gray value computation failed.")
 
 
 # ───────────────────────────────────────────
