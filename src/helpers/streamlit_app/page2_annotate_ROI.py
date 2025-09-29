@@ -4,12 +4,12 @@ import numpy as np
 import streamlit as st
 from PIL import Image
 
-from helpers.streamlit_app.streamlit_image_loader import draw_rectangle_canvas
+from helpers.streamlit_app.streamlit_image_loader import (
+    draw_rectangle_canvas,
+    load_images_from_dir,
+)
 
 
-# ───────────────────────────────────────────
-# ROI Annotator
-# ───────────────────────────────────────────
 class RectAnnotator:
     def __init__(
         self, image_stack: np.ndarray, save_dir: str, prefix="page2_annotator"
@@ -18,7 +18,7 @@ class RectAnnotator:
         self.save_dir = save_dir
         self.prefix = prefix
 
-    def select_slice(self) -> int:
+    def select_slice(self):
         return st.slider(
             "Select slice (for drawing ROI boundary)",
             0,
@@ -79,3 +79,17 @@ class RectAnnotator:
                 )
             else:
                 st.warning("Please draw a rectangle before saving.")
+
+
+def app():
+    st.header("Annotate Regions of Interest")
+    if "working_dir" not in st.session_state:
+        st.warning("Please create a working directory first.")
+        return
+    cropped_stack = load_images_from_dir(
+        os.path.join(st.session_state["working_dir"], "crops", "data_stack")
+    )
+    if cropped_stack is not None:
+        RectAnnotator(cropped_stack, st.session_state["working_dir"]).run()
+    else:
+        st.warning("No cropped images found.")

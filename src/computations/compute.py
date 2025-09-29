@@ -4,24 +4,35 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import NonNegativeInt
 from scipy.ndimage import convolve
-from skimage.transform import resize
 
 from computations.helpers import parallel_compute_eigen
 
 
 def average_gray_value(image, window_radius) -> NDArray:
-    weights = np.ones(
-        (
-            2 * window_radius + 1,
-            2 * window_radius + 1,
-            2 * window_radius + 1,
-        )
-    )
-    noramalize_weights = 0.0
-    noramalize_weights /= np.sum(weights)
-    average = convolve(image, noramalize_weights, mode="constant")
+    """
+    Compute average gray value for every voxel in a 3D image
+    using a cubic neighborhood of size (2*window_radius+1)^3.
 
-    return average.astype(np.float32)
+    Parameters
+    ----------
+    image : NDArray
+        3D numpy array (grayscale image stack).
+    window_radius : int
+        Radius of neighborhood in voxels.
+
+    Returns
+    -------
+    NDArray
+        3D array of same shape as input with local average values.
+    """
+    # Create cubic kernel of ones
+    kernel_size = 2 * window_radius + 1
+    kernel = np.ones((kernel_size, kernel_size, kernel_size), dtype=np.float32)
+
+    # Normalize kernel so it computes the mean
+    kernel /= kernel.size
+
+    return convolve(image.astype(np.float32), kernel, mode="constant", cval=0.0)
 
 
 def azmithal_angles(strcture_tensor, window_radius) -> np.ndarray:

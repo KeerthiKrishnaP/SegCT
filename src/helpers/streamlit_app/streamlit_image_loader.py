@@ -2,7 +2,7 @@ import base64
 import importlib
 import io
 import os
-from typing import Tuple
+from typing import Any, Tuple
 
 import numpy as np
 import streamlit as st
@@ -47,6 +47,26 @@ def load_images_from_dir(dir: str, ext: str = ".tiff") -> np.ndarray | None:
         np.array(Image.open(os.path.join(dir, f)).convert("L")) for f in files
     ]
     return np.stack(image_list, axis=0)
+
+
+import numpy as np
+
+# helpers/streamlit_app/streamlit_utils.py
+import streamlit as st
+
+
+def slice_viewer(
+    image_stack: np.ndarray, prefix="slice_viewer", caption="Select slice"
+) -> Tuple[int, np.ndarray[Any, Any]]:
+    num_slices = image_stack.shape[0]
+    idx = st.slider(
+        caption,
+        min_value=0,
+        max_value=num_slices - 1,
+        value=0,
+        key=f"{prefix}_slice_slider",
+    )
+    return idx, image_stack[idx]
 
 
 def draw_rectangle_canvas(
