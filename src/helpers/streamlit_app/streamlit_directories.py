@@ -39,20 +39,18 @@ def save_eigen_to_h5(
     print(f"Saved eigen data to: {filepath}")
 
 
-def load_eigen_from_h5(directory: str, filename: str) -> Tuple[np.ndarray, np.ndarray]:
+def load_eigen_from_h5(directory: str) -> Tuple[np.ndarray, np.ndarray]:
     """
     Load eigenvalues and eigenvectors from an HDF5 file.
     Returns:
         (evals, evecs)
     """
-    filepath = os.path.join(directory, filename)
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"HDF5 file not found: {filepath}")
+    if not os.path.exists(directory):
+        raise FileNotFoundError(f"HDF5 file not found: {directory}")
 
-    with h5py.File(filepath, "r") as f:
-        # ✅ Use typing hint + explicit casting to keep Pylance happy
+    with h5py.File(directory, "r") as f:
         evals = np.array(f["evals"])  # type: ignore[index]
         evecs = np.array(f["evecs"])  # type: ignore[index]
 
-    print(f"Loaded eigen data from: {filepath}")
+    print(f"Loaded eigen data from: {directory}")
     return evals, evecs

@@ -24,7 +24,6 @@ def compute_anisotropy(evals: np.ndarray) -> np.ndarray:
 
 
 def compute_azimuthal_angle(evecs: np.ndarray) -> np.ndarray:
-    # Principal eigenvector (associated with λ3)
     v = evecs[..., :, 2]  # shape (..., 3)
 
     vx = v[..., 0]

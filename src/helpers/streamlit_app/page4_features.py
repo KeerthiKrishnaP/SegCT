@@ -1,3 +1,4 @@
+import glob
 import os
 
 import numpy as np
@@ -16,9 +17,9 @@ from helpers.streamlit_app.streamlit_image_loader import (
     slice_viewer,
 )
 from src.computations.comput_features import (
+    compute_anisotropy,
     compute_average_gray_value,
-    compute_structural_tensor,
-    test_image_chunker,
+    compute_azimuthal_angle,
 )
 
 
@@ -49,17 +50,15 @@ def app() -> None:
         return
 
     # Directories for results
+    result_anisotropy = os.path.join(data_path, "results_anisotropy")
+    results_avg_dir = os.path.join(data_path, "results_average_gray")
+    results_azimuthal_angle = os.path.join(data_path, "results_azimuthal_angle")
 
     comp_type = st.selectbox(
         "Choose computation:",
-        ["Average Gray Value", "Anisotropy", "Azimuthal angle", "Test Chunker"],
+        ["Average Gray Value", "Anisotropy", "Azimuthal angle"],
     )
-    window_size = st.number_input("Window size:", min_value=1, value=15)
-    window_radius = st.number_input("Window radius:", min_value=1, value=15)
-    parallel = st.checkbox("Run in parallel?", value=False)
-    max_workers = st.number_input(
-        "Number of workers:", min_value=1, max_value=8, value=6
-    )
+
     image = load_images_from_dir(data_path)
 
     if image is None:
@@ -68,29 +67,53 @@ def app() -> None:
 
     match comp_type:
         case "Anisotropy":
-            st.subheader("Compute anisotropy from Structural Tensor")
-            if st.button("Run Computation"):
-                # Look for the computed Eigen values in the results directory
-
-                # load the eigen's and compute the anisotropy choose from drop down menu
-
-                results = compute_structural_tensor(
-                    image, window_size, parallel, max_workers
+            st.subheader("Compute anisotropy from Eigen's")
+            st.write("Load precomputed Eigen values from HDF5 file.")
+            if st.button("Auto fetch Eigen's"):
+                path_for_eigen = os.path.join(data_path, "results_eigen_values")
+                st.write(f"looking for :{path_for_eigen}")
+                h5_files = glob.glob(
+                    os.path.join(path_for_eigen, "**", "*.h5"), recursive=True
                 )
-                for comp, arr in results.items():
-                    comp_dir = os.path.join(results_struct_dir, comp)
-                    os.makedirs(comp_dir, exist_ok=True)
-                    for i in range(arr.shape[0]):
-                        img = Image.fromarray((arr[i]).astype(np.uint8))
-                        img.save(os.path.join(comp_dir, f"{comp}_slice{i}.tiff"))
-                st.success(f"Results saved in {results_struct_dir}")
-            if is_nonempty_dir(results_struct_dir):
-                slice_idx = st.slider("Select slice", 0, image.shape[0] - 1, 0)
-                images = load_structural_tensor_images(results_struct_dir, slice_idx)
-                show_component_images(images, slice_idx)
+                if not h5_files:
+                    st.warning("No .h5 files found in the specified directory.")
+                else:
+                    file_names = [os.path.basename(f) for f in h5_files]
+                    selected_file = st.selectbox("Select an .h5 file:", file_names)
+                    selected_path = h5_files[file_names.index(selected_file)]
+                    st.write(f"Selected file path:{selected_path}")
+                    st.code(selected_path)
+
+            if st.button("Run Computation"):
+                eigen_values, eigen_vectors = load_eigen_from_h5(selected_path)
+                st.write("Computing anisotropy...")
+                anisotropy = compute_anisotropy(eigen_values)
+                st.write("Computation completed.")
+                if anisotropy is not None:
+                    # function to rewrite the present directory.
+                    check_and_create_dir(result_anisotropy)
+                    for i in range(anisotropy.shape[0]):
+                        img = Image.fromarray((anisotropy[i] * 255).astype(np.uint8))
+                        img.save(
+                            os.path.join(result_anisotropy, f"anisotropy_slice{i}.tiff")
+                        )
+            if is_nonempty_dir(result_anisotropy):
+                st.success(f"Results saved in {result_anisotropy}")
+                image_stack = load_images_from_dir(result_anisotropy)
+                if image_stack is not None:
+                    index, image = slice_viewer(image_stack, prefix="anisotropy_viewer")
+                    st.image(
+                        np.clip(image, 0, 255).astype(np.uint8),
+                        caption=f"Anisotropy for slice {index}",
+                    )
 
         case "Average Gray Value":
             st.subheader("Average Gray Value Computation")
+            window_radius = st.number_input("Window radius:", min_value=1, value=15)
+            parallel = st.checkbox("Run in parallel?", value=False)
+            max_workers = st.number_input(
+                "Number of workers:", min_value=1, max_value=8, value=6
+            )
             if st.button("Run Computation"):
                 st.write("Computing average gray value...")
                 average_gray_value = compute_average_gray_value(
@@ -116,25 +139,41 @@ def app() -> None:
                     )
 
         case "Azimuthal Angle":
-            st.subheader("Azimuthal Angle Computation")
-            st.info("This feature is under development.")
+            st.subheader("Compute Azimuthal Angle from Eigen vectors")
+            st.write("Load precomputed Eigen values from HDF5 file.")
+            if st.button("Auto fetch Eigen's"):
+                path_for_eigen = os.path.join(data_path, "results_eigen_values")
+                if h5_files := glob.glob(os.path.join(path_for_eigen, "**", "*.h5")):
+                    file_names = [os.path.basename(f) for f in h5_files]
+                    selected_file = st.selectbox("Select an .h5 file:", file_names)
+                    selected_path = h5_files[file_names.index(selected_file)]
 
-        case "Test Chunker":
-            st.subheader("Test Image Chunker")
-            if st.button("Run Test Chunker"):
-                st.write("Testing image chunker...")
-            stitched_images = test_image_chunker(
-                image, window_size, parallel=parallel, max_workers=max_workers
-            )
-            if stitched_images is not None:
-                check_and_create_dir(results_chunker_dir)
-                for i in range(stitched_images.shape[0]):
-                    img = Image.fromarray((stitched_images[i]).astype(np.uint8))
-                    img.save(
-                        os.path.join(results_chunker_dir, f"chunked_slice{i}.tiff")
+                    st.write("📂 Selected file path:")
+                    st.code(selected_path)
+                else:
+                    st.warning("No .h5 files found in the specified directory.")
+
+            if st.button("Run Computation"):
+                _, eigen_vectors = load_eigen_from_h5(selected_path)
+                st.write("Computing anisotropy...")
+                anisotropy = compute_azimuthal_angle(eigen_vectors)
+                st.write("Computation completed.")
+                if anisotropy is not None:
+                    # function to rewrite the present directory.
+                    check_and_create_dir(results_azimuthal_angle)
+                    for i in range(anisotropy.shape[0]):
+                        img = Image.fromarray((anisotropy[i] * 255).astype(np.uint8))
+                        img.save(
+                            os.path.join(
+                                results_azimuthal_angle, f"anisotropy_slice{i}.tiff"
+                            )
+                        )
+            if is_nonempty_dir(results_azimuthal_angle):
+                st.success(f"Results saved in {results_azimuthal_angle}")
+                image_stack = load_images_from_dir(results_azimuthal_angle)
+                if image_stack is not None:
+                    index, image = slice_viewer(image_stack, prefix="anisotropy_viewer")
+                    st.image(
+                        np.clip(image, 0, 255).astype(np.uint8),
+                        caption=f"Anisotropy for slice {index}",
                     )
-                st.success(f"Chunked images saved in {results_chunker_dir}")
-                index, image = slice_viewer(stitched_images, prefix="chunked_viewer")
-                st.image(image, caption=f"Slice{index} of stitched images")
-            else:
-                st.error("Image chunker test failed.")

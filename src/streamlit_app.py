@@ -30,7 +30,7 @@ def main() -> None:
         page3_computations.app()
 
     elif page == "Page 4: Features":
-        st.info("Segmentation page (coming soon).")
+        page4_features.app()
 
     elif page == "Page 5: Viewer":
         st.info("Viewer page (coming soon).")
