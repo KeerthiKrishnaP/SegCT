@@ -1,8 +1,5 @@
 from enum import Enum
 
-import numpy as np
-from pydantic import BaseModel, NonNegativeInt
-
 
 class FilterType(Enum):
     UNIFORM = "uniform filter"
