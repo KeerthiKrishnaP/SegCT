@@ -1,6 +1,5 @@
 import os
 
-import h5py
 import numpy as np
 import streamlit as st
 from PIL import Image
@@ -9,6 +8,7 @@ from helpers.streamlit_app.streamlit_computes import load_structural_tensor_imag
 from helpers.streamlit_app.streamlit_directories import (
     check_and_create_dir,
     is_nonempty_dir,
+    load_eigen_from_h5,
 )
 from helpers.streamlit_app.streamlit_image_loader import (
     load_images_from_dir,

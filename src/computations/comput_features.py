@@ -7,10 +7,31 @@ from numpy.typing import NDArray
 
 from computations.compute import (
     average_gray_value,
-    eig_single_tensor,
     structural_tensor,
 )
 from helpers.image_chunker import chunk_image_fixed_chunks, stitch_chunks
+
+
+def compute_anisotropy(evals: np.ndarray) -> np.ndarray:
+    lambda_1 = evals[..., 0]
+    lambda_3 = evals[..., 2]
+
+    beta = np.zeros_like(lambda_3)
+    mask = lambda_3 > 0
+    beta[mask] = 1.0 - (lambda_1[mask] / lambda_3[mask])
+
+    return beta
+
+
+def compute_azimuthal_angle(evecs: np.ndarray) -> np.ndarray:
+    # Principal eigenvector (associated with λ3)
+    v = evecs[..., :, 2]  # shape (..., 3)
+
+    vx = v[..., 0]
+    vy = v[..., 1]
+
+    # azimuthal angle (radians)
+    return np.arctan2(vy, vx)
 
 
 def compute_structural_tensor(
@@ -46,29 +67,48 @@ def compute_structural_tensor(
     }
 
 
-def parallel_eigen_computations(
-    components: dict, max_workers: int = 1
+def fast_eigen_computations(
+    components: dict,
 ) -> tuple[ndarray[Any, Any], ndarray[Any, Any]]:
-    # Flatten components → shape (N, 6)
-    stacked = np.stack(
-        [
-            components["S11"].ravel(),
-            components["S22"].ravel(),
-            components["S33"].ravel(),
-            components["S12"].ravel(),
-            components["S13"].ravel(),
-            components["S23"].ravel(),
-        ],
-        axis=-1,
-    )
-    max_workers = -1
+    """
+    components: dict with keys S11,S22,S33,S12,S13,S23, each (N,M,K)
+    Returns:
+        evals: (N,M,K,3)
+        evecs: (N,M,K,3,3)
+    """
+    shape = components["S11"].shape
+    n_vox = np.prod(shape)
 
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        results = list(executor.map(eig_single_tensor, stacked))
+    # Flatten components
+    S11 = components["S11"].ravel()
+    S22 = components["S22"].ravel()
+    S33 = components["S33"].ravel()
+    S12 = components["S12"].ravel()
+    S13 = components["S13"].ravel()
+    S23 = components["S23"].ravel()
 
-    evals, evecs = zip(*results)
-    evals = np.array(evals).reshape(components["S11"].shape + (3,))
-    evecs = np.array(evecs).reshape(components["S11"].shape + (3, 3))
+    # Build tensor field (n_vox,3,3)
+    S = np.column_stack((S11, S22, S33, S12, S13, S23))
+    # Fill symmetric matrices explicitly
+    S_full = np.zeros((n_vox, 3, 3), dtype=np.float64)
+    S_full[:, 0, 0] = S[:, 0]
+    S_full[:, 1, 1] = S[:, 1]
+    S_full[:, 2, 2] = S[:, 2]
+    S_full[:, 0, 1] = S_full[:, 1, 0] = S[:, 3]
+    S_full[:, 0, 2] = S_full[:, 2, 0] = S[:, 4]
+    S_full[:, 1, 2] = S_full[:, 2, 1] = S[:, 5]
+
+    # ---- Eigen decomposition ----
+    evals, evecs = np.linalg.eigh(S_full)
+
+    # ---- Sort descending ----
+    order = np.argsort(evals, axis=1)[:, ::-1]
+    evals = np.take_along_axis(evals, order, axis=1)
+    evecs = np.take_along_axis(evecs, order[:, None, :], axis=2)
+
+    # ---- Reshape back ----
+    evals = evals.reshape(shape + (3,))
+    evecs = evecs.reshape(shape + (3, 3))
 
     return evals, evecs
 

@@ -39,26 +39,6 @@ def average_gray_value(image, window_radius) -> NDArray:
     return image_3.astype(np.float32)
 
 
-def azmithal_angles(strcture_tensor, window_radius) -> np.ndarray:
-    azimutal_angle = np.array([])
-
-    return azimutal_angle.astype(np.float32)
-
-
-def structure_anisotropty(strcture_tensor, window_radius) -> np.ndarray:
-    structure_anisotropty = np.array([])
-
-    return structure_anisotropty.astype(np.float32)
-
-
-def eig_single_tensor(Svec) -> tuple[ndarray[Any, Any], ndarray[Any, Any]]:
-    S11, S22, S33, S12, S13, S23 = Svec
-    S = np.array([[S11, S12, S13], [S12, S22, S23], [S13, S23, S33]], dtype=float)
-    w, V = np.linalg.eigh(S)
-    idx = np.argsort(w)[::-1]
-    return w[idx], V[:, idx]
-
-
 def structural_tensor(image: np.ndarray, window_radius: int) -> dict[str, np.ndarray]:
     kernel = np.array([1, -8, 0, 8, -1], dtype=np.float32)
 

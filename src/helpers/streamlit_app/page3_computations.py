@@ -1,6 +1,5 @@
 import os
 
-import h5py
 import numpy as np
 import streamlit as st
 from PIL import Image
@@ -9,6 +8,7 @@ from helpers.streamlit_app.streamlit_computes import load_structural_tensor_imag
 from helpers.streamlit_app.streamlit_directories import (
     check_and_create_dir,
     is_nonempty_dir,
+    save_eigen_to_h5,
 )
 from helpers.streamlit_app.streamlit_image_loader import (
     load_images_from_dir,
@@ -18,7 +18,7 @@ from helpers.streamlit_app.streamlit_image_loader import (
 )
 from src.computations.comput_features import (
     compute_structural_tensor,
-    parallel_eigen_computations,
+    fast_eigen_computations,
     test_image_chunker,
 )
 
@@ -110,27 +110,21 @@ def app() -> None:  # sourcery skip: extract-method
                 dict_components = load_structural_tensor_dict_from_images(
                     results_struct_dir
                 )
-                eigen_values_pixel = parallel_eigen_computations(
-                    components=dict_components, max_workers=max_workers
+                eigen_values, eigen_vectors = fast_eigen_computations(
+                    components=dict_components
                 )
                 st.write("Computation completed.")
                 # function to rewrite the present directory.
                 check_and_create_dir(results_eigen_values)
-                with h5py.File(
-                    os.path.join(results_eigen_values, file_name, ".h5"), "w"
-                ) as file:
-                    file.create_dataset(
-                        "eigenvals",
-                        data=eigen_values_pixel[0],
-                        compression="gzip",
-                        chunks="true",
-                    )
-                    file.create_dataset(
-                        "eigenvectors",
-                        data=eigen_values_pixel[1],
-                        compression="gzip",
-                        chunks="true",
-                    )
+                save_eigen_to_h5(
+                    results_eigen_values,
+                    f"{file_name}.h5",
+                    eigen_values,
+                    eigen_vectors,
+                )
+                st.success(
+                    f"Eigen values saved in {results_eigen_values} with file name {file_name}.h5"
+                )
 
         case "Test Chunker":
             st.subheader("Test Image Chunker")
