@@ -7,7 +7,6 @@ from PIL import Image
 
 from helpers.streamlit_app.streamlit_image_loader import (
     draw_rectangle_canvas,
-    load_images_from_dir,
     slice_viewer,
 )
 

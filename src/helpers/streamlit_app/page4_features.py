@@ -12,19 +12,18 @@ from helpers.streamlit_app.streamlit_directories import (
 )
 from helpers.streamlit_app.streamlit_image_loader import (
     load_images_from_dir,
-    load_structural_tensor_dict_from_images,
     show_component_images,
     slice_viewer,
 )
 from src.computations.comput_features import (
+    compute_average_gray_value,
     compute_structural_tensor,
-    parallel_eigen_computations,
     test_image_chunker,
 )
 
 
-def app() -> None:  # sourcery skip: extract-method
-    st.header("Segmentation and Computations")
+def app() -> None:
+    st.header("Compute features from Images")
 
     if "working_dir" not in st.session_state:
         st.warning("Please create or load a working directory in Page 1 first.")
@@ -50,13 +49,10 @@ def app() -> None:  # sourcery skip: extract-method
         return
 
     # Directories for results
-    results_struct_dir = os.path.join(data_path, "results_structural_tensor")
-    results_eigen_values = os.path.join(data_path, "results_eigen_values")
-    results_chunker_dir = os.path.join(data_path, "results_chunker")
 
     comp_type = st.selectbox(
         "Choose computation:",
-        ["Structural Tensor", "Eigen's", "Test Chunker"],
+        ["Average Gray Value", "Anisotropy", "Azimuthal angle", "Test Chunker"],
     )
     window_size = st.number_input("Window size:", min_value=1, value=15)
     window_radius = st.number_input("Window radius:", min_value=1, value=15)
@@ -67,13 +63,17 @@ def app() -> None:  # sourcery skip: extract-method
     image = load_images_from_dir(data_path)
 
     if image is None:
-        st.error("No cropped images found in dataset path.")
+        st.error("No images found in dataset path.")
         return
 
     match comp_type:
-        case "Structural Tensor":
-            st.subheader("Structural Tensor Computation")
+        case "Anisotropy":
+            st.subheader("Compute anisotropy from Structural Tensor")
             if st.button("Run Computation"):
+                # Look for the computed Eigen values in the results directory
+
+                # load the eigen's and compute the anisotropy choose from drop down menu
+
                 results = compute_structural_tensor(
                     image, window_size, parallel, max_workers
                 )
@@ -89,48 +89,35 @@ def app() -> None:  # sourcery skip: extract-method
                 images = load_structural_tensor_images(results_struct_dir, slice_idx)
                 show_component_images(images, slice_idx)
 
-        case "Eigen's":
-            st.subheader("Eigen Values Computation")
-            file_name = st.text_input(
-                "File name for saving the computations:", "file_name"
-            )
-            if st.button("Auto fetch structural tensor"):
-                if is_nonempty_dir(results_struct_dir):
-                    # load images from the present path.
-                    st.write(
-                        f"the structural tensor is taken from {results_struct_dir}"
-                    )
-                else:
-                    st.warning("No results for the structural tensor found")
-                    st.write("compute the structural tensor first")
-                # check where the data is being sourced from
-
+        case "Average Gray Value":
+            st.subheader("Average Gray Value Computation")
             if st.button("Run Computation"):
-                st.write("Computing average Eigen value...")
-                dict_components = load_structural_tensor_dict_from_images(
-                    results_struct_dir
-                )
-                eigen_values_pixel = parallel_eigen_computations(
-                    components=dict_components, max_workers=max_workers
+                st.write("Computing average gray value...")
+                average_gray_value = compute_average_gray_value(
+                    image, window_radius, parallel, max_workers
                 )
                 st.write("Computation completed.")
-                # function to rewrite the present directory.
-                check_and_create_dir(results_eigen_values)
-                with h5py.File(
-                    os.path.join(results_eigen_values, file_name, ".h5"), "w"
-                ) as file:
-                    file.create_dataset(
-                        "eigenvals",
-                        data=eigen_values_pixel[0],
-                        compression="gzip",
-                        chunks="true",
+                if average_gray_value is not None:
+                    # function to rewrite the present directory.
+                    check_and_create_dir(results_avg_dir)
+                    for i in range(average_gray_value.shape[0]):
+                        img = Image.fromarray((average_gray_value[i]).astype(np.uint8))
+                        img.save(
+                            os.path.join(results_avg_dir, f"avg_gray_slice{i}.tiff")
+                        )
+            if is_nonempty_dir(results_avg_dir):
+                st.success(f"Results saved in {results_avg_dir}")
+                image_stack = load_images_from_dir(results_avg_dir)
+                if image_stack is not None:
+                    index, image = slice_viewer(image_stack, prefix="avg_gray_viewer")
+                    st.image(
+                        np.clip(image, 0, 255).astype(np.uint8),
+                        caption=f"Average gray value for slice {index}",
                     )
-                    file.create_dataset(
-                        "eigenvectors",
-                        data=eigen_values_pixel[1],
-                        compression="gzip",
-                        chunks="true",
-                    )
+
+        case "Azimuthal Angle":
+            st.subheader("Azimuthal Angle Computation")
+            st.info("This feature is under development.")
 
         case "Test Chunker":
             st.subheader("Test Image Chunker")

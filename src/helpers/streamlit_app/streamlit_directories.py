@@ -7,7 +7,7 @@ def is_nonempty_dir(path: str) -> bool:
     return os.path.exists(path) and os.path.isdir(path) and len(os.listdir(path)) > 0
 
 
-def _check_and_create_dir(path: str) -> None:
+def check_and_create_dir(path: str) -> None:
     if os.path.exists(path):
         import shutil
 

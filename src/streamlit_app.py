@@ -3,6 +3,7 @@ import streamlit as st
 import helpers.streamlit_app.page1_crop as page1_crop
 import helpers.streamlit_app.page2_annotate_ROI as page2_annotator
 import helpers.streamlit_app.page3_computations as page3_computations
+import helpers.streamlit_app.page4_features as page4_features
 
 
 def main() -> None:
@@ -14,7 +15,7 @@ def main() -> None:
             "Page 1: Crop Images",
             "Page 2: Annotate ROIs",
             "Page 3: Computations",
-            "Page 4: Segmentation & Stats",
+            "Page 4: Features",
             "Page 5: Viewer",
         ],
     )
@@ -28,7 +29,7 @@ def main() -> None:
     elif page == "Page 3: Computations":
         page3_computations.app()
 
-    elif page == "Page 4: Segmentation & Stats":
+    elif page == "Page 4: Features":
         st.info("Segmentation page (coming soon).")
 
     elif page == "Page 5: Viewer":

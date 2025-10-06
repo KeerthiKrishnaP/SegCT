@@ -1,35 +1,51 @@
+from typing import Any
+
 import numpy as np
 from numpy.typing import NDArray
 
 
-def chunk_image_with_overlap(image: NDArray, window: int, split_axis: int = 2):
+def chunk_image_fixed_chunks(
+    image: NDArray, num_chunks: int, overlap: int
+) -> tuple[list[Any], list[Any], int]:
     """
-    Split image into overlapping chunks along one axis.
+    Split the image into `num_chunks` along its longest axis.
     Returns chunks and their (start,end) positions in the full image.
     """
+    # Pick the longest axis
+    split_axis = int(np.argmax(image.shape))
     size = image.shape[split_axis]
-    step = window  # effective step without overlap
-    overlap = window // 2
+
+    # Step size with remainder handling
+    base_step = size // num_chunks
+    remainder = size % num_chunks  # distribute extra pixels across first chunks
 
     positions = []
     chunks = []
     start = 0
-    while start < size:
-        end = min(start + step, size)
-        # add overlap
+
+    for i in range(num_chunks):
+        step = base_step + (1 if i < remainder else 0)
+        end = start + step
+
+        # Apply overlap
         chunk_start = max(0, start - overlap)
         chunk_end = min(size, end + overlap)
 
+        # Build slice
         sl = [slice(None)] * image.ndim
         sl[split_axis] = slice(chunk_start, chunk_end)
+
         chunks.append(image[tuple(sl)])
         positions.append((start, end))
 
-        start = end  # move forward
+        start = end
+
     return chunks, positions, split_axis
 
 
-def stitch_chunks(chunks, positions, split_axis: int, image_shape: tuple) -> NDArray:
+def stitch_chunks(
+    chunks: NDArray, positions: list, split_axis: int, image_shape: tuple
+) -> NDArray:
     stitched = np.zeros(image_shape, dtype=chunks[0].dtype)
 
     for chunk, (start, end) in zip(chunks, positions):
@@ -48,5 +64,7 @@ def stitch_chunks(chunks, positions, split_axis: int, image_shape: tuple) -> NDA
         slc_stitched = [slice(None)] * len(image_shape)
         slc_stitched[split_axis] = slice(start, end)
         stitched[tuple(slc_stitched)] = chunk_cropped
+
+    print("stitching done")
 
     return stitched
