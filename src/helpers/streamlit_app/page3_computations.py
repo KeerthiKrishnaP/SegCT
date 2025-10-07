@@ -1,20 +1,21 @@
+import glob
 import os
-from typing import Any
 
 import numpy as np
 import streamlit as st
 from numpy.typing import NDArray
 from PIL import Image
 
-from helpers.streamlit_app.streamlit_computes import load_structural_tensor_images
 from helpers.streamlit_app.streamlit_directories import (
     check_and_create_dir,
     is_nonempty_dir,
     save_eigen_to_h5,
 )
 from helpers.streamlit_app.streamlit_image_loader import (
-    load_images_from_dir,
+    load_stack_from_h5,
     load_structural_tensor_dict_from_images,
+    load_structural_tensor_images,
+    save_stack_to_h5,
     show_component_images,
     slice_viewer,
 )
@@ -29,18 +30,25 @@ from src.computations.comput_features import (
 # --------------------------------------------------------------------
 
 
-def save_image_stack(stack: np.ndarray, save_dir: str, prefix: str) -> None:
-    """Save a 3D image stack as TIFF files."""
-    check_and_create_dir(save_dir)
-    for i, img_array in enumerate(stack):
-        img = Image.fromarray(img_array.astype(np.uint8))
-        img.save(os.path.join(save_dir, f"{prefix}_slice{i}.tiff"))
+def fetch_h5_files(data_path: str) -> list[str]:
+    """Recursively find all .h5 files in results_eigen_values directory."""
+    path_for_eigen = os.path.join(data_path, "results_eigen_values")
+
+    return glob.glob(os.path.join(path_for_eigen, "**", "*.h5"), recursive=True)
+
+
+def select_h5_file(h5_files: list, key: str) -> str:
+    """Show file selection box for available .h5 files."""
+    file_names = [os.path.basename(f) for f in h5_files]
+    selected_file = st.selectbox("Select an .h5 file:", file_names, key=key)
+
+    return h5_files[file_names.index(selected_file)]
 
 
 def preview_dataset(data_path: str) -> NDArray | None:
     """Display a preview image from the dataset."""
     st.write("### Sample Image from Dataset")
-    sample_images = load_images_from_dir(data_path)
+    sample_images = load_stack_from_h5(data_path)
     if sample_images is not None:
         index, image = slice_viewer(sample_images, prefix="sample_viewer")
         st.image(image, caption=f"Slice {index} of dataset")
@@ -50,18 +58,18 @@ def preview_dataset(data_path: str) -> NDArray | None:
         return None
 
 
-def display_saved_results(result_dir: str, prefix: str, show_fn=None) -> None:
+def display_saved_results(result_dir: str, prefix: str, show_function=None) -> None:
     """Display computed results if available."""
     if not is_nonempty_dir(result_dir):
         return
     st.success(f"Results available in {result_dir}")
 
-    if show_fn:
+    if show_function:
         slice_idx = st.slider("Select slice", 0, 20, 0, key=f"slider_{prefix}")
-        images = show_fn(result_dir, slice_idx)
+        images = show_function(result_dir, slice_idx)
         show_component_images(images, slice_idx)
     else:
-        image_stack = load_images_from_dir(result_dir)
+        image_stack = load_stack_from_h5(result_dir)
         if image_stack is not None:
             index, image = slice_viewer(image_stack, prefix=f"{prefix}_viewer")
             st.image(
@@ -87,13 +95,13 @@ def handle_structural_tensor(
     if st.button("Run Computation", key="run_struct_tensor"):
         st.write("Computing structural tensor...")
         results = compute_structural_tensor(image, window_size, parallel, max_workers)
-        for comp, arr in results.items():
-            comp_dir = os.path.join(result_dir, comp)
-            save_image_stack(arr, comp_dir, comp)
-        st.success(f"Results saved in {result_dir}")
+        for component_name, image in results.items():
+            save_path = os.path.join(result_dir, component_name)
+            save_stack_to_h5(image, save_path)
+        st.success(f"Results saved in {save_path}")
 
     display_saved_results(
-        result_dir, "structural_tensor", show_fn=load_structural_tensor_images
+        result_dir, "structural_tensor", show_function=load_structural_tensor_images
     )
 
 
@@ -139,7 +147,7 @@ def handle_test_chunker(
             image, window_size, parallel=parallel, max_workers=max_workers
         )
         if stitched_images is not None:
-            save_image_stack(stitched_images, result_dir, "chunked")
+            save_stack_to_h5(stack=stitched_images, filepath=result_dir)
             st.success(f"Chunked images saved in {result_dir}")
             index, img = slice_viewer(stitched_images, prefix="chunked_viewer")
             st.image(img, caption=f"Chunked image slice {index}")
@@ -162,7 +170,11 @@ def app() -> None:
 
     base_dir = st.session_state["working_dir"]
     dataset_path = st.text_input("Enter dataset path (relative to working directory):")
-    data_path = os.path.join(base_dir, dataset_path)
+    if not dataset_path:
+        st.info("Please enter a dataset path.")
+    file = select_h5_file(fetch_h5_files(dataset_path), key="cropped_images")
+
+    data_path = os.path.join(base_dir, dataset_path, file)
 
     st.write(f"**Base directory:** {base_dir}")
     st.write(f"**Full dataset path:** {data_path}")

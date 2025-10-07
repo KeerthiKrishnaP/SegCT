@@ -1,10 +1,10 @@
 import streamlit as st
 
-import helpers.streamlit_app.page1_crop as page1_crop
-import helpers.streamlit_app.page2_annotate_ROI as page2_annotator
-import helpers.streamlit_app.page3_computations as page3_computations
-import helpers.streamlit_app.page4_features as page4_features
-import helpers.streamlit_app.page6_viewer as page6_viewer
+import helpers.streamlit_app.page2_annotate_ROI as roi_annotator
+import helpers.streamlit_app.page3_computations as computations
+import helpers.streamlit_app.page4_features as features
+import helpers.streamlit_app.page6_viewer as viewer
+import src.helpers.streamlit_app.page1_load_crop_main_image as load_crop
 
 
 def main() -> None:
@@ -23,22 +23,22 @@ def main() -> None:
     )
 
     if page == "Page 1: Crop Images":
-        page1_crop.app()
+        load_crop.app()
 
     elif page == "Page 2: Annotate ROIs":
-        page2_annotator.app()
+        roi_annotator.app()
 
     elif page == "Page 3: Computations":
-        page3_computations.app()
+        computations.app()
 
     elif page == "Page 4: Features":
-        page4_features.app()
+        features.app()
 
     elif page == "Page 5: Segmentation":
         st.info("Viewer page (coming soon).")
 
     elif page == "Page 6: Viewer":
-        page6_viewer.app()
+        viewer.app()
 
 
 if __name__ == "__main__":

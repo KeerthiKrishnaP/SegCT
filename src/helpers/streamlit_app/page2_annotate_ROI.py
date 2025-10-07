@@ -13,12 +13,12 @@ from helpers.streamlit_app.streamlit_image_loader import (
 class RectAnnotator:
     def __init__(
         self, image_stack: np.ndarray, save_dir: str, prefix="page2_annotator"
-    ):
+    ) -> None:
         self.image_stack = image_stack
         self.save_dir = save_dir
         self.prefix = prefix
 
-    def select_slice(self):
+    def select_slice(self) -> int:
         return st.slider(
             "Select slice (for drawing ROI boundary)",
             0,
@@ -81,7 +81,7 @@ class RectAnnotator:
                 st.warning("Please draw a rectangle before saving.")
 
 
-def app():
+def app() -> None:
     st.header("Annotate Regions of Interest")
     if "working_dir" not in st.session_state:
         st.warning("Please create a working directory first.")
