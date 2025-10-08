@@ -130,21 +130,6 @@ def show_component_images(images: dict, slice_idx: int) -> None:
             )
 
 
-def load_structural_tensor_dict_from_images(
-    results_dir,
-) -> dict[str, NDArray]:
-    """Load S11...S23 images for a given slice if they exist."""
-    comps = ["S11", "S22", "S33", "S12", "S13", "S23"]
-    components_dict = defaultdict()
-
-    for comp in comps:
-        components_dict[comp] = load_images_from_dir(
-            os.path.join(results_dir, comp), ext=".tiff"
-        )
-
-    return components_dict
-
-
 def save_stack_to_h5(stack: NDArray, filepath: str):
     """
     Save a 3D NumPy array (n_images, height, width) to an HDF5 (.h5) file.
@@ -236,7 +221,7 @@ def crop_3d_stack(
     return volume[start_slice:end_slice, y_start:y_end, x_start:x_end]
 
 
-def load_structural_tensor_images(results_dir: str) -> Dict[str, Image.Image]:
+def load_structural_tensor_images(results_dir: str) -> Dict[str, NDArray]:
     """Load S11...S23 images for a given slice if they exist."""
     components = ["S11", "S22", "S33", "S12", "S13", "S23"]
     images = {}
@@ -248,3 +233,42 @@ def load_structural_tensor_images(results_dir: str) -> Dict[str, Image.Image]:
                 images[component] = load_stack_from_h5(file_path)
 
     return images
+
+
+def normalize_stack(
+    data: NDArray | dict[str, NDArray],
+) -> NDArray | Dict[str, NDArray]:
+    """
+    Normalize image data (2D or 3D) or all stacks in a dictionary to 0–255 uint8.
+
+    Parameters
+    ----------
+    data : np.ndarray or dict[str, np.ndarray]
+        Input image stack or dictionary of stacks.
+
+    Returns
+    -------
+    np.ndarray or dict[str, np.ndarray]
+        Normalized image stack(s) as uint8.
+    """
+
+    def _normalize_single(stack: np.ndarray) -> np.ndarray:
+        stack_min = stack.min()
+        stack_max = stack.max()
+        print(f"Normalizing stack with min {stack_min}, max {stack_max}")
+        normalized = (stack - stack_min) / (stack_max - stack_min)
+
+        return (normalized * 255).astype(np.uint8)
+
+    # --- Handle dictionary input ---
+    if isinstance(data, dict):
+        return {name: _normalize_single(stack) for name, stack in data.items()}
+
+    # --- Handle single array input ---
+    elif isinstance(data, np.ndarray):
+        return _normalize_single(data)
+
+    else:
+        raise TypeError(
+            "Input must be either a NumPy array or a dict[str, np.ndarray]."
+        )

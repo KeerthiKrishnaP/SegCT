@@ -13,10 +13,9 @@ from helpers.streamlit_app.streamlit_directories import (
 )
 from helpers.streamlit_app.streamlit_image_loader import (
     load_stack_from_h5,
-    load_structural_tensor_dict_from_images,
     load_structural_tensor_images,
+    normalize_stack,
     save_stack_to_h5,
-    show_component_images,
     slice_viewer,
 )
 from src.computations.comput_features import (
@@ -31,50 +30,57 @@ from src.computations.comput_features import (
 
 
 def fetch_h5_files(data_path: str) -> list[str]:
-    """Recursively find all .h5 files in results_eigen_values directory."""
-    path_for_eigen = os.path.join(data_path, "results_eigen_values")
+    """Recursively find all .h5 files in directory."""
 
-    return glob.glob(os.path.join(path_for_eigen, "**", "*.h5"), recursive=True)
+    return glob.glob(os.path.join(data_path, "**", "*.h5"), recursive=True)
 
 
-def select_h5_file(h5_files: list, key: str) -> str:
+def select_h5_file(h5_files: list) -> str:
     """Show file selection box for available .h5 files."""
     file_names = [os.path.basename(f) for f in h5_files]
-    selected_file = st.selectbox("Select an .h5 file:", file_names, key=key)
+    selected_file = st.selectbox("Select an .h5 file:", file_names)
 
     return h5_files[file_names.index(selected_file)]
 
 
-def preview_dataset(data_path: str) -> NDArray | None:
+def preview_dataset(sample_images: NDArray) -> None:
     """Display a preview image from the dataset."""
-    st.write("### Sample Image from Dataset")
-    sample_images = load_stack_from_h5(data_path)
+    st.write("Preview of the data set:")
     if sample_images is not None:
         index, image = slice_viewer(sample_images, prefix="sample_viewer")
         st.image(image, caption=f"Slice {index} of dataset")
-        return sample_images
+        return None
     else:
         st.warning("No images found in the specified dataset path.")
         return None
 
 
-def display_saved_results(result_dir: str, prefix: str, show_function=None) -> None:
+def display_saved_results(result_dir: str) -> None:
     """Display computed results if available."""
     if not is_nonempty_dir(result_dir):
         return
     st.success(f"Results available in {result_dir}")
+    image_dict = load_structural_tensor_images(result_dir)
+    normalized_stack = normalize_stack(image_dict)
 
-    if show_function:
-        slice_idx = st.slider("Select slice", 0, 20, 0, key=f"slider_{prefix}")
-        images = show_function(result_dir, slice_idx)
-        show_component_images(images, slice_idx)
+    if isinstance(normalized_stack, dict):
+        # Arrange components in two rows (2 per row)
+        components = list(normalized_stack.items())
+        n_cols = 2
+        for row_start in range(0, len(components), n_cols):
+            cols = st.columns(n_cols)
+            for col, (name, stack) in zip(
+                cols, components[row_start : row_start + n_cols]
+            ):
+                if stack is not None:
+                    index, image = slice_viewer(stack, prefix=f"View {name}")
+                    col.image(
+                        image,
+                        caption=f"Slice {index} — {name}",
+                        use_container_width=True,
+                    )
     else:
-        image_stack = load_stack_from_h5(result_dir)
-        if image_stack is not None:
-            index, image = slice_viewer(image_stack, prefix=f"{prefix}_viewer")
-            st.image(
-                image, caption=f"{prefix.replace('_', ' ').capitalize()} slice {index}"
-            )
+        raise ValueError("Expected a dictionary of image stacks for structural tensor.")
 
 
 # --------------------------------------------------------------------
@@ -96,13 +102,12 @@ def handle_structural_tensor(
         st.write("Computing structural tensor...")
         results = compute_structural_tensor(image, window_size, parallel, max_workers)
         for component_name, image in results.items():
-            save_path = os.path.join(result_dir, component_name)
+            check_and_create_dir(os.path.join(result_dir, component_name))
+            save_path = os.path.join(result_dir, component_name, f"{component_name}.h5")
             save_stack_to_h5(image, save_path)
         st.success(f"Results saved in {save_path}")
 
-    display_saved_results(
-        result_dir, "structural_tensor", show_function=load_structural_tensor_images
-    )
+    display_saved_results(result_dir)
 
 
 def handle_eigen_computation(result_struct_dir: str, result_eigen_dir: str):
@@ -119,7 +124,7 @@ def handle_eigen_computation(result_struct_dir: str, result_eigen_dir: str):
 
     if st.button("Run Computation", key="run_eigen"):
         st.write("Computing eigenvalues and eigenvectors...")
-        dict_components = load_structural_tensor_dict_from_images(result_struct_dir)
+        dict_components = load_structural_tensor_images(result_struct_dir)
         eigen_values, eigen_vectors = fast_eigen_computations(
             components=dict_components
         )
@@ -147,7 +152,9 @@ def handle_test_chunker(
             image, window_size, parallel=parallel, max_workers=max_workers
         )
         if stitched_images is not None:
-            save_stack_to_h5(stack=stitched_images, filepath=result_dir)
+            check_and_create_dir(result_dir)
+            total_file_path = os.path.join(result_dir, "stitched_images.h5")
+            save_stack_to_h5(stack=stitched_images, filepath=total_file_path)
             st.success(f"Chunked images saved in {result_dir}")
             index, img = slice_viewer(stitched_images, prefix="chunked_viewer")
             st.image(img, caption=f"Chunked image slice {index}")
@@ -172,27 +179,32 @@ def app() -> None:
     dataset_path = st.text_input("Enter dataset path (relative to working directory):")
     if not dataset_path:
         st.info("Please enter a dataset path.")
-    file = select_h5_file(fetch_h5_files(dataset_path), key="cropped_images")
-
-    data_path = os.path.join(base_dir, dataset_path, file)
-
-    st.write(f"**Base directory:** {base_dir}")
-    st.write(f"**Full dataset path:** {data_path}")
-
-    if not os.path.exists(data_path):
-        st.warning("Dataset path not found. Example: warp/1 or crops/")
         return
+    st.write(f"**Base directory:** {base_dir}")
+    dataset_path = os.path.join(base_dir, dataset_path)
+    st.write(f"**Full dataset path for .h5 files:** {dataset_path}")
+
+    file = select_h5_file(fetch_h5_files(dataset_path))
+    data_path = os.path.join(dataset_path, file)
+    st.write(f"**Loaded data is {file}.h5 file @ {data_path}")
 
     # --- Preview dataset ---
-    image_stack = preview_dataset(data_path)
-    if image_stack is None:
+    images = load_stack_from_h5(data_path)
+    images = normalize_stack(images)
+    if images is None:
+        st.warning("No images found in the specified dataset path.")
+        return
+    if isinstance(images, np.ndarray):
+        preview_dataset(images)
+    else:
+        st.error("Failed to load images from the .h5 file.")
         return
 
     # --- Create result directories ---
     result_dirs = {
-        "Structural Tensor": os.path.join(data_path, "results_structural_tensor"),
-        "Eigen's": os.path.join(data_path, "results_eigen_values"),
-        "Test Chunker": os.path.join(data_path, "results_chunker"),
+        "Structural Tensor": os.path.join(dataset_path, "results_structural_tensor"),
+        "Eigen's": os.path.join(dataset_path, "results_eigen_values"),
+        "Test Chunker": os.path.join(dataset_path, "results_chunker"),
     }
 
     # --- Computation parameters ---
@@ -211,7 +223,7 @@ def app() -> None:
     # --- Dispatch handler ---
     if comp_type == "Structural Tensor":
         handle_structural_tensor(
-            image_stack,
+            images,
             result_dirs["Structural Tensor"],
             window_size,
             parallel,
@@ -225,5 +237,5 @@ def app() -> None:
 
     elif comp_type == "Test Chunker":
         handle_test_chunker(
-            image_stack, result_dirs["Test Chunker"], window_size, parallel, max_workers
+            images, result_dirs["Test Chunker"], window_size, parallel, max_workers
         )
