@@ -62,7 +62,7 @@ def compute_structural_tensor(
             split_axis,
             image.shape,  # type: ignore
         )
-        for key in results[0].keys()
+        for key in results[0].keys()  # type: ignore
     }
 
 

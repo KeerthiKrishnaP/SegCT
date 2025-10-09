@@ -1,7 +1,4 @@
-from typing import Any
-
 import numpy as np
-from numpy import ndarray
 from numpy.typing import NDArray
 from pydantic import NonNegativeInt
 from scipy.ndimage import convolve1d, uniform_filter1d
@@ -56,12 +53,12 @@ def structural_tensor(image: np.ndarray, window_radius: int) -> dict[str, np.nda
         Structural tensor components: S11, S22, S33, S12, S13, S23
     """
     # derivative kernel (central difference)
-    kernel = np.array([-1, -2, 0, 2, 1], dtype=np.float32) / 8.0
+    kernel = np.array([-1, 8, 0, -8, 1], dtype=np.float32) / 12.0
 
     # partial derivatives
-    Ix = convolve1d(image, kernel, axis=2, mode="reflect")
-    Iy = convolve1d(image, kernel, axis=1, mode="reflect")
-    Iz = convolve1d(image, kernel, axis=0, mode="reflect")
+    Ix = convolve1d(image, kernel, axis=2, mode="nearest")
+    Iy = convolve1d(image, kernel, axis=1, mode="nearest")
+    Iz = convolve1d(image, kernel, axis=0, mode="nearest")
 
     # tensor components before smoothing
     s11 = Ix * Ix
@@ -86,8 +83,10 @@ def structural_tensor(image: np.ndarray, window_radius: int) -> dict[str, np.nda
 def _get_average_over_image(image: NDArray, size: NonNegativeInt) -> NDArray:
     """Helper function to compute average gray value over entire image."""
 
-    image_1 = uniform_filter1d(image, size=size, axis=0, mode="reflect")
-    image_2 = uniform_filter1d(image_1, size=size, axis=1, mode="reflect")
-    image_3 = uniform_filter1d(image_2, size=size, axis=2, mode="reflect")
+    modified_image = uniform_filter1d(image, size=size, axis=0, mode="nearest")
+    modified_image = uniform_filter1d(modified_image, size=size, axis=1, mode="nearest")
+    convoluted_image = uniform_filter1d(
+        modified_image, size=size, axis=2, mode="nearest"
+    )
 
-    return image_3.astype(np.float32)
+    return convoluted_image.astype(np.float32)

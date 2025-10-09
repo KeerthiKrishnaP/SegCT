@@ -1,19 +1,12 @@
 import os
 
 import streamlit as st
-from numpy.typing import NDArray
 
 from helpers.streamlit_app.streamlit_image_loader import (
-    load_images_from_dir,
+    load_stack_from_h5,
     slice_viewer,
 )
 from helpers.streamlit_app.streamlit_plotters import plot_2d, plot_3d
-
-
-#  Cache expensive operations
-@st.cache_data(show_spinner=False)
-def cached_load_images(path) -> NDArray | None:
-    return load_images_from_dir(path)
 
 
 def app() -> None:
@@ -36,7 +29,7 @@ def app() -> None:
 
     # Cached image loading
     st.write("### Sample Image from Dataset")
-    sample_images = cached_load_images(data_path)
+    sample_images = load_stack_from_h5(data_path)
     if sample_images is not None:
         index, image = slice_viewer(sample_images, prefix="sample_viewer")
         st.image(image, caption=f"Slice {index} of dataset")
@@ -83,11 +76,11 @@ def app() -> None:
 
         # Use caching for result directories too
         try:
-            x = cached_load_images(result_dirs[parameter_1])
-            y = cached_load_images(result_dirs[parameter_2])
+            x = load_stack_from_h5(result_dirs[parameter_1]).flatten()
+            y = load_stack_from_h5(result_dirs[parameter_2]).flatten()
 
             if len(unique_chosen) == 3:
-                z = cached_load_images(result_dirs[parameter_3])
+                z = load_stack_from_h5(result_dirs[parameter_3]).flatten()
                 fig = plot_3d(
                     x,
                     y,

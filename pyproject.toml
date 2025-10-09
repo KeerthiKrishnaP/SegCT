@@ -19,7 +19,7 @@ dependencies = [
     "numpy==1.26.4",
     "matplotlib==3.10.0",
     "pydantic>=2.10.6",
-    "pymesh>=1.0.0",  # Fixed version specifier
+    "pymesh>=1.0.0", # Fixed version specifier
     "meshio==5.3.5",
     "pygmsh==7.1.*",
     "gmsh==4.10.*",
@@ -32,8 +32,10 @@ dependencies = [
     "streamlit-drawable-canvas  <= 0.9.*",
     "opencv-python >= 4.9.0",
     "pillow >= 10.0.0",
-    "h5py >= 3.14.0"
-
+    "h5py >= 3.14.0",
+    "joblib>=1.5.2",
+    "scikit-learn>=1.7.2",
+    "tqdm>=4.67.1",
 ]
 
 [build-system]

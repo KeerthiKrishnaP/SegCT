@@ -4,17 +4,18 @@ import os
 import numpy as np
 import streamlit as st
 from numpy.typing import NDArray
-from PIL import Image
 
 from helpers.streamlit_app.streamlit_directories import (
     check_and_create_dir,
-    is_nonempty_dir,
+    fetch_h5_files,
     save_eigen_to_h5,
+    select_h5_file,
 )
 from helpers.streamlit_app.streamlit_image_loader import (
     load_stack_from_h5,
-    load_structural_tensor_images,
+    load_structural_tensor,
     normalize_stack,
+    preview_dataset,
     save_stack_to_h5,
     slice_viewer,
 )
@@ -25,62 +26,16 @@ from src.computations.comput_features import (
 )
 
 # --------------------------------------------------------------------
-# Utility Functions
+# Cached functions
 # --------------------------------------------------------------------
 
 
-def fetch_h5_files(data_path: str) -> list[str]:
-    """Recursively find all .h5 files in directory."""
+@st.cache_data
+def load_and_normalize_images(data_path: str) -> np.ndarray | dict[str, NDArray]:
+    """Load and normalize image stack from .h5 file (cached)."""
+    images = load_stack_from_h5(data_path)
 
-    return glob.glob(os.path.join(data_path, "**", "*.h5"), recursive=True)
-
-
-def select_h5_file(h5_files: list) -> str:
-    """Show file selection box for available .h5 files."""
-    file_names = [os.path.basename(f) for f in h5_files]
-    selected_file = st.selectbox("Select an .h5 file:", file_names)
-
-    return h5_files[file_names.index(selected_file)]
-
-
-def preview_dataset(sample_images: NDArray) -> None:
-    """Display a preview image from the dataset."""
-    st.write("Preview of the data set:")
-    if sample_images is not None:
-        index, image = slice_viewer(sample_images, prefix="sample_viewer")
-        st.image(image, caption=f"Slice {index} of dataset")
-        return None
-    else:
-        st.warning("No images found in the specified dataset path.")
-        return None
-
-
-def display_saved_results(result_dir: str) -> None:
-    """Display computed results if available."""
-    if not is_nonempty_dir(result_dir):
-        return
-    st.success(f"Results available in {result_dir}")
-    image_dict = load_structural_tensor_images(result_dir)
-    normalized_stack = normalize_stack(image_dict)
-
-    if isinstance(normalized_stack, dict):
-        # Arrange components in two rows (2 per row)
-        components = list(normalized_stack.items())
-        n_cols = 2
-        for row_start in range(0, len(components), n_cols):
-            cols = st.columns(n_cols)
-            for col, (name, stack) in zip(
-                cols, components[row_start : row_start + n_cols]
-            ):
-                if stack is not None:
-                    index, image = slice_viewer(stack, prefix=f"View {name}")
-                    col.image(
-                        image,
-                        caption=f"Slice {index} — {name}",
-                        use_container_width=True,
-                    )
-    else:
-        raise ValueError("Expected a dictionary of image stacks for structural tensor.")
+    return normalize_stack(images)
 
 
 # --------------------------------------------------------------------
@@ -97,34 +52,31 @@ def handle_structural_tensor(
 ) -> None:
     """Compute and visualize the structural tensor."""
     st.subheader("Structural Tensor Computation")
-
+    st.session_state["file_name"] = st.text_input(
+        "File name for saving results:", st.session_state.get("file_name")
+    )
     if st.button("Run Computation", key="run_struct_tensor"):
         st.write("Computing structural tensor...")
         results = compute_structural_tensor(image, window_size, parallel, max_workers)
-        for component_name, image in results.items():
-            check_and_create_dir(os.path.join(result_dir, component_name))
-            save_path = os.path.join(result_dir, component_name, f"{component_name}.h5")
-            save_stack_to_h5(image, save_path)
+        check_and_create_dir(os.path.join(result_dir))
+        save_path = os.path.join(
+            result_dir,
+            f"{st.session_state.get('file_name')}.h5",
+        )
+        save_stack_to_h5(results, save_path)
         st.success(f"Results saved in {save_path}")
 
-    display_saved_results(result_dir)
 
-
-def handle_eigen_computation(result_struct_dir: str, result_eigen_dir: str):
+def handle_eigen_computation(result_struct_dir: str, result_eigen_dir: str) -> None:
+    # sourcery skip: extract-method
     """Compute and save eigenvalues and eigenvectors."""
     st.subheader("Eigenvalue Computation")
 
     file_name = st.text_input("File name for saving results:", "file_name")
-
-    if st.button("Auto fetch Structural Tensor", key="fetch_struct_tensor"):
-        if is_nonempty_dir(result_struct_dir):
-            st.info(f"Using structural tensor data from {result_struct_dir}")
-        else:
-            st.warning("No structural tensor results found. Compute them first.")
-
-    if st.button("Run Computation", key="run_eigen"):
+    file = select_h5_file(fetch_h5_files(result_struct_dir))
+    if st.button("Run Computation"):
         st.write("Computing eigenvalues and eigenvectors...")
-        dict_components = load_structural_tensor_images(result_struct_dir)
+        dict_components = load_structural_tensor(os.path.join(result_struct_dir, file))
         eigen_values, eigen_vectors = fast_eigen_computations(
             components=dict_components
         )
@@ -188,17 +140,20 @@ def app() -> None:
     data_path = os.path.join(dataset_path, file)
     st.write(f"**Loaded data is {file}.h5 file @ {data_path}")
 
-    # --- Preview dataset ---
-    images = load_stack_from_h5(data_path)
-    images = normalize_stack(images)
-    if images is None:
-        st.warning("No images found in the specified dataset path.")
-        return
-    if isinstance(images, np.ndarray):
-        preview_dataset(images)
+    # --- Load and preview only once ---
+    if "images" not in st.session_state or st.session_state.get("last_file") != file:
+        images = load_and_normalize_images(data_path)
+        st.session_state["images"] = images
+        st.session_state["last_file"] = file
+        st.session_state["preview_shown"] = False
+        st.info("Images loaded and cached successfully.")
     else:
-        st.error("Failed to load images from the .h5 file.")
-        return
+        images = st.session_state["images"]
+
+    if not st.session_state.get("preview_shown", False):
+        if isinstance(images, np.ndarray):
+            preview_dataset(images)
+        st.session_state["preview_shown"] = True
 
     # --- Create result directories ---
     result_dirs = {
@@ -222,13 +177,14 @@ def app() -> None:
 
     # --- Dispatch handler ---
     if comp_type == "Structural Tensor":
-        handle_structural_tensor(
-            images,
-            result_dirs["Structural Tensor"],
-            window_size,
-            parallel,
-            max_workers,
-        )
+        if isinstance(images, np.ndarray):
+            handle_structural_tensor(
+                images[:150, :, :],
+                result_dirs["Structural Tensor"],
+                window_size,
+                parallel,
+                max_workers,
+            )
 
     elif comp_type == "Eigen's":
         handle_eigen_computation(
@@ -236,6 +192,7 @@ def app() -> None:
         )
 
     elif comp_type == "Test Chunker":
-        handle_test_chunker(
-            images, result_dirs["Test Chunker"], window_size, parallel, max_workers
-        )
+        if isinstance(images, np.ndarray):
+            handle_test_chunker(
+                images, result_dirs["Test Chunker"], window_size, parallel, max_workers
+            )

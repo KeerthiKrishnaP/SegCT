@@ -1,3 +1,4 @@
+import glob
 import os
 from typing import Any, Tuple
 
@@ -10,14 +11,18 @@ def is_nonempty_dir(path: str) -> bool:
     return os.path.exists(path) and os.path.isdir(path) and len(os.listdir(path)) > 0
 
 
-def check_and_create_dir(path: str) -> None:
-    if os.path.exists(path):
+def check_and_create_dir(path: str, empty=False) -> None:
+    if os.path.exists(path) and empty:
         import shutil
 
         shutil.rmtree(path)
         st.info(f"Overwriting existing directory: {path}")
-    os.makedirs(path)
-    st.success(f"Created directory: {path}")
+    elif os.path.exists(path):
+        st.info(f"Directory already exists: {path} files will be saved inside.")
+        return None
+    else:
+        os.makedirs(path)
+        st.success(f"Created directory: {path}")
 
     return None
 
@@ -54,3 +59,16 @@ def load_eigen_from_h5(directory: str) -> Tuple[np.ndarray, np.ndarray]:
 
     print(f"Loaded eigen data from: {directory}")
     return evals, evecs
+
+
+def fetch_h5_files(data_path: str) -> list[str]:
+    """Return list of .h5 files only in the given directory (non-recursive)."""
+    return glob.glob(os.path.join(data_path, "*.h5"))
+
+
+def select_h5_file(h5_files: list, for_data: str = "") -> str:
+    """Show file selection box for available .h5 files."""
+    file_names = [os.path.basename(f) for f in h5_files]
+    selected_file = st.selectbox(f"Select an .h5 file:{for_data}", file_names)
+
+    return h5_files[file_names.index(selected_file)]

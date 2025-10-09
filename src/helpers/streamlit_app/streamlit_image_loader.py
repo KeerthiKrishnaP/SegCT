@@ -57,12 +57,12 @@ def _resize_if_needed(
     return img, 1.0
 
 
-def load_images_from_dir(dir: str, ext: str = ".tiff") -> np.ndarray | None:
+def load_images_from_dir(dir: str, ext: str = ".tiff") -> np.ndarray:
     if not os.path.exists(dir):
-        return None
+        raise KeyError(f"Missing directory @ {dir}")
     files = sorted([f for f in os.listdir(dir) if f.endswith(ext)])
     if not files:
-        return None
+        raise KeyError(f"Missing file in directory @ {dir}")
     image_list = [
         np.array(Image.open(os.path.join(dir, f)).convert("L")) for f in files
     ]
@@ -130,7 +130,7 @@ def show_component_images(images: dict, slice_idx: int) -> None:
             )
 
 
-def save_stack_to_h5(stack: NDArray, filepath: str):
+def save_stack_to_h5(stack: NDArray | dict[str, NDArray], filepath: str):
     """
     Save a 3D NumPy array (n_images, height, width) to an HDF5 (.h5) file.
 
@@ -143,22 +143,32 @@ def save_stack_to_h5(stack: NDArray, filepath: str):
     dataset_name : str, optional
         Name of the dataset inside the HDF5 file (default is 'stack').
     """
-    if not isinstance(stack, np.ndarray):
-        raise TypeError("Input must be a numpy array.")
+    if isinstance(stack, dict):
+        """
+        Save a dictionary of NumPy arrays to an HDF5 (.h5) file.
 
-    if stack.ndim != 3:
-        raise ValueError("Input array must be 3D (n_images, height, width).")
+        Parameters:
+            data (dict[str, np.ndarray]): Dictionary to save
+            filename (str): Output .h5 file path
+        """
+        with h5py.File(filepath, "w") as file:
+            for key, array in stack.items():
+                file.create_dataset(key, data=array)
 
-    if not os.path.exists(filepath):
-        Path(os.path.dirname(filepath)).mkdir(parents=True, exist_ok=True)
-        dataset_name = "stack"
+    else:
+        if stack.ndim != 3:
+            raise ValueError("Input array must be 3D (n_images, height, width).")
 
-    with h5py.File(filepath, "w") as file:
-        file.create_dataset(dataset_name, data=stack, compression="gzip")
-        file.attrs["shape"] = stack.shape
-        file.attrs["dtype"] = str(stack.dtype)
+        if not os.path.exists(filepath):
+            Path(os.path.dirname(filepath)).mkdir(parents=True, exist_ok=True)
+            dataset_name = "stack"
 
-    print(f"✅ Saved stack with shape {stack.shape} to {filepath}")
+        with h5py.File(filepath, "w") as file:
+            file.create_dataset(dataset_name, data=stack, compression="gzip")
+            file.attrs["shape"] = stack.shape
+            file.attrs["dtype"] = str(stack.dtype)
+
+        print(f"✅ Saved stack with shape {stack.shape} to {filepath}")
 
 
 def load_stack_from_h5(filepath: str) -> NDArray:
@@ -221,18 +231,22 @@ def crop_3d_stack(
     return volume[start_slice:end_slice, y_start:y_end, x_start:x_end]
 
 
-def load_structural_tensor_images(results_dir: str) -> Dict[str, NDArray]:
-    """Load S11...S23 images for a given slice if they exist."""
-    components = ["S11", "S22", "S33", "S12", "S13", "S23"]
-    images = {}
-    for component in components:
-        comp_dir = os.path.join(results_dir, component)
-        if os.path.exists(comp_dir):
-            file_path = os.path.join(comp_dir, f"{component}.h5")
-            if os.path.exists(file_path):
-                images[component] = load_stack_from_h5(file_path)
+def load_structural_tensor(results_dir: str) -> Dict[str, NDArray]:
+    """
+    Load a dictionary of NumPy arrays from an HDF5 (.h5) file.
 
-    return images
+    Parameters:
+        filename (str): Path to the .h5 file
+
+    Returns:
+        dict[str, np.ndarray]: Loaded dictionary
+    """
+    result = {}
+    with h5py.File(results_dir, "r") as file:
+        for key in file.keys():
+            result[key] = file[key][:]  # type: ignore
+
+    return result
 
 
 def normalize_stack(
@@ -272,3 +286,15 @@ def normalize_stack(
         raise TypeError(
             "Input must be either a NumPy array or a dict[str, np.ndarray]."
         )
+
+
+def preview_dataset(sample_images: NDArray) -> None:
+    """Display a preview image from the dataset."""
+    st.write("Preview of the data set:")
+    if sample_images is not None:
+        index, image = slice_viewer(sample_images, prefix="sample_viewer")
+        st.image(image, caption=f"Slice {index} of dataset")
+    else:
+        st.warning("No images found in the specified dataset path.")
+
+    return None
