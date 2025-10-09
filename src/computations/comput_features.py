@@ -24,7 +24,6 @@ def compute_anisotropy(evals: np.ndarray) -> np.ndarray:
 
 
 def compute_azimuthal_angle(evecs: np.ndarray) -> np.ndarray:
-    # Principal eigenvector (associated with λ3)
     v = evecs[..., :, 2]  # shape (..., 3)
 
     vx = v[..., 0]
@@ -63,7 +62,7 @@ def compute_structural_tensor(
             split_axis,
             image.shape,  # type: ignore
         )
-        for key in results[0].keys()
+        for key in results[0].keys()  # type: ignore
     }
 
 

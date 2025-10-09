@@ -3,8 +3,10 @@ import importlib
 import io
 import os
 from collections import defaultdict
-from typing import Any, Tuple
+from pathlib import Path
+from typing import Any, Dict, Tuple
 
+import h5py
 import numpy as np
 import streamlit as st
 from numpy.typing import NDArray
@@ -16,17 +18,27 @@ from streamlit_drawable_canvas import CanvasResult, st_canvas
 _st_image_mod = importlib.import_module("streamlit.elements.image")
 
 
-def _image_to_url(image, format, *args, **kwargs):
+def _image_to_url(image, format: str | None = None, *args, **kwargs) -> str:
+    """Convert a PIL image to a base64-encoded data URL for Streamlit canvas."""
+
+    # --- Defensive handling ---
+    if not isinstance(format, str):
+        format = getattr(image, "format", "PNG") or "PNG"
+
+    fmt = format.lower().lstrip(".")  # type: ignore
     buffered = io.BytesIO()
-    image.save(buffered, format=format)
+    image.save(buffered, format=fmt.upper())  # PIL expects "PNG", "TIFF", etc.
     b64 = base64.b64encode(buffered.getvalue()).decode("ascii")
-    match format:
-        case "PNG":
-            return f"data:image/png;base64,{b64}"
-        case "TIFF":
-            return f"data:image/tiff;base64,{b64}"
+
+    match fmt:
+        case "png":
+            mime = "image/png"
+        case "tiff" | "tif":
+            mime = "image/tiff"
         case _:
-            raise ValueError("Define the right format of the image")
+            mime = f"image/{fmt}"
+
+    return f"data:{mime};base64,{b64}"
 
 
 _st_image_mod.image_to_url = _image_to_url
@@ -45,12 +57,12 @@ def _resize_if_needed(
     return img, 1.0
 
 
-def load_images_from_dir(dir: str, ext: str = ".tiff") -> np.ndarray | None:
+def load_images_from_dir(dir: str, ext: str = ".tiff") -> np.ndarray:
     if not os.path.exists(dir):
-        return None
+        raise KeyError(f"Missing directory @ {dir}")
     files = sorted([f for f in os.listdir(dir) if f.endswith(ext)])
     if not files:
-        return None
+        raise KeyError(f"Missing file in directory @ {dir}")
     image_list = [
         np.array(Image.open(os.path.join(dir, f)).convert("L")) for f in files
     ]
@@ -118,16 +130,171 @@ def show_component_images(images: dict, slice_idx: int) -> None:
             )
 
 
-def load_structural_tensor_dict_from_images(
-    results_dir,
-) -> dict[str, NDArray]:
-    """Load S11...S23 images for a given slice if they exist."""
-    comps = ["S11", "S22", "S33", "S12", "S13", "S23"]
-    components_dict = defaultdict()
+def save_stack_to_h5(stack: NDArray | dict[str, NDArray], filepath: str):
+    """
+    Save a 3D NumPy array (n_images, height, width) to an HDF5 (.h5) file.
 
-    for comp in comps:
-        components_dict[comp] = load_images_from_dir(
-            os.path.join(results_dir, comp), ext=".tiff"
+    Parameters
+    ----------
+    stack : np.ndarray
+        3D NumPy array containing the image stack.
+    filepath : str
+        Path to save the .h5 file.
+    dataset_name : str, optional
+        Name of the dataset inside the HDF5 file (default is 'stack').
+    """
+    if isinstance(stack, dict):
+        """
+        Save a dictionary of NumPy arrays to an HDF5 (.h5) file.
+
+        Parameters:
+            data (dict[str, np.ndarray]): Dictionary to save
+            filename (str): Output .h5 file path
+        """
+        with h5py.File(filepath, "w") as file:
+            for key, array in stack.items():
+                file.create_dataset(key, data=array)
+
+    else:
+        if stack.ndim != 3:
+            raise ValueError("Input array must be 3D (n_images, height, width).")
+
+        if not os.path.exists(filepath):
+            Path(os.path.dirname(filepath)).mkdir(parents=True, exist_ok=True)
+            dataset_name = "stack"
+
+        with h5py.File(filepath, "w") as file:
+            file.create_dataset(dataset_name, data=stack, compression="gzip")
+            file.attrs["shape"] = stack.shape
+            file.attrs["dtype"] = str(stack.dtype)
+
+        print(f"✅ Saved stack with shape {stack.shape} to {filepath}")
+
+
+def load_stack_from_h5(filepath: str) -> NDArray:
+    """
+    Load a 3D NumPy array from an HDF5 (.h5) file.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the .h5 file.
+    Returns
+    -------
+    np.ndarray
+        3D NumPy array (n_images, height, width).
+    """
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"{filepath} does not exist.")
+
+    with h5py.File(filepath, "r") as file:
+        print("Keys:", list(file.keys()))
+        dataset_name = list(file.keys())[0]
+        data = np.array(file[dataset_name])
+
+    print(f"✅ Loaded stack with shape {data.shape} from {filepath}")
+
+    return data
+
+
+def crop_3d_stack(
+    volume: NDArray,
+    rectangle_cor: tuple[int, int, int, int],
+    end_slice: int,
+    start_slice: int = 0,
+) -> NDArray:
+    """
+    Crops a rectangular region from each 2D slice in a 3D numpy array.
+
+    Parameters
+    ----------
+    volume : np.ndarray
+        3D array of shape (num_slices, height, width)
+    start_slice : int
+        Index of the first slice to include (inclusive)
+    end_slice : int
+        Index of the last slice to include (exclusive)
+    x_start, x_end : int
+        X-coordinate range (columns)
+    y_start, y_end : int
+        Y-coordinate range (rows)
+
+    Returns
+    -------
+    cropped_volume : np.ndarray
+        Cropped 3D array
+    """
+    x_start, y_start, w, h = rectangle_cor
+    x_end = x_start + w
+    y_end = y_start + h
+
+    return volume[start_slice:end_slice, y_start:y_end, x_start:x_end]
+
+
+def load_structural_tensor(results_dir: str) -> Dict[str, NDArray]:
+    """
+    Load a dictionary of NumPy arrays from an HDF5 (.h5) file.
+
+    Parameters:
+        filename (str): Path to the .h5 file
+
+    Returns:
+        dict[str, np.ndarray]: Loaded dictionary
+    """
+    result = {}
+    with h5py.File(results_dir, "r") as file:
+        for key in file.keys():
+            result[key] = file[key][:]  # type: ignore
+
+    return result
+
+
+def normalize_stack(
+    data: NDArray | dict[str, NDArray],
+) -> NDArray | Dict[str, NDArray]:
+    """
+    Normalize image data (2D or 3D) or all stacks in a dictionary to 0–255 uint8.
+
+    Parameters
+    ----------
+    data : np.ndarray or dict[str, np.ndarray]
+        Input image stack or dictionary of stacks.
+
+    Returns
+    -------
+    np.ndarray or dict[str, np.ndarray]
+        Normalized image stack(s) as uint8.
+    """
+
+    def _normalize_single(stack: np.ndarray) -> np.ndarray:
+        stack_min = stack.min()
+        stack_max = stack.max()
+        print(f"Normalizing stack with min {stack_min}, max {stack_max}")
+        normalized = (stack - stack_min) / (stack_max - stack_min)
+
+        return (normalized * 255).astype(np.uint8)
+
+    # --- Handle dictionary input ---
+    if isinstance(data, dict):
+        return {name: _normalize_single(stack) for name, stack in data.items()}
+
+    # --- Handle single array input ---
+    elif isinstance(data, np.ndarray):
+        return _normalize_single(data)
+
+    else:
+        raise TypeError(
+            "Input must be either a NumPy array or a dict[str, np.ndarray]."
         )
 
-    return components_dict
+
+def preview_dataset(sample_images: NDArray) -> None:
+    """Display a preview image from the dataset."""
+    st.write("Preview of the data set:")
+    if sample_images is not None:
+        index, image = slice_viewer(sample_images, prefix="sample_viewer")
+        st.image(image, caption=f"Slice {index} of dataset")
+    else:
+        st.warning("No images found in the specified dataset path.")
+
+    return None
