@@ -10,7 +10,7 @@ def segment_3d_image_from_data(
     image_features: dict,
     window_size: int = 15,
     num_bins: int = 50,
-    visualize: bool = False,
+    visualize: bool = True,
 ) -> np.ndarray:
     """
     Segments a 3D image into regions (matrix, warp, weft, void) based on
@@ -19,22 +19,22 @@ def segment_3d_image_from_data(
     Parameters
     ----------
     training_data : dict
-        Dictionary structured as:
+        Dict like:
         {
           "warp": {"gray": arr, "azimuth": arr, "anisotropy": arr},
           "weft": {...}, "matrix": {...}, "void": {...}
         }
-        Each feature array is 1D (flattened values).
+        Each feature array must be 1D numeric.
     image_features : dict
-        Dictionary structured as:
+        Dict like:
         {"gray": 3D_array, "azimuth": 3D_array, "anisotropy": 3D_array}
-        All arrays must have the same shape.
+        All same shape.
     window_size : int
         Cubic window size (e.g., 15 → 15×15×15 voxels per segment).
     num_bins : int
-        Number of bins for feature histograms.
+        Number of bins for histograms.
     visualize : bool
-        If True, shows a mid-slice of the segmented volume.
+        If True, shows mid-slice of segmented volume.
 
     Returns
     -------
@@ -46,19 +46,54 @@ def segment_3d_image_from_data(
     labels = list(training_data.keys())
 
     # ------------------------------------------------------------
-    # 1. Compute class histograms from training data
+    # 1. Validate and clean training data
     # ------------------------------------------------------------
     hist_class = {}
     for label in labels:
         hist_class[label] = {}
         for feature in feature_names:
-            h, _ = np.histogram(
-                training_data[label][feature], bins=num_bins, density=True
-            )
+            arr = training_data[label][feature]
+
+            # Check for callable objects (methods/functions)
+            if callable(arr):
+                raise TypeError(
+                    f"❌ Training data error: {label}-{feature} is a callable object "
+                    "(likely a method). Make sure you passed the actual array, not the method reference."
+                )
+
+            # Convert to numpy float64
+            arr = np.asarray(arr, dtype=np.float64).ravel()
+
+            # Remove NaN / Inf
+            arr = arr[np.isfinite(arr)]
+            if arr.size == 0:
+                raise ValueError(f"❌ No valid numeric values for {label}-{feature}")
+
+            # Compute histogram
+            h, _ = np.histogram(arr, bins=num_bins, density=True)
             hist_class[label][feature] = h + 1e-12
 
+    print("✅ Training data histograms computed successfully.")
+
     # ------------------------------------------------------------
-    # 2. Distance metric (KL + Wasserstein)
+    # 2. Validate image feature consistency
+    # ------------------------------------------------------------
+    shape = None
+    for f in feature_names:
+        data = image_features[f]
+        if callable(data):
+            raise TypeError(f"❌ Image feature '{f}' is a callable/method, not data.")
+        arr = np.asarray(data, dtype=np.float64)
+        if shape is None:
+            shape = arr.shape
+        elif arr.shape != shape:
+            raise ValueError(f"❌ Mismatch: {f} shape {arr.shape} ≠ {shape}")
+        image_features[f] = arr  # ensure clean float arrays
+
+    print(f"✅ Loaded image features with shape {shape}")
+
+    # ------------------------------------------------------------
+    # 3. Distance metric (KL + Wasserstein)
     # ------------------------------------------------------------
     def compute_class_distance(region_hists, label):
         dists = []
@@ -71,20 +106,18 @@ def segment_3d_image_from_data(
         return np.mean(dists)
 
     # ------------------------------------------------------------
-    # 3. Segment the 3D image
+    # 4. Segment 3D image by window
     # ------------------------------------------------------------
-    shape = image_features[feature_names[0]].shape
     nx, ny, nz = shape
     sx = sy = sz = window_size
     nx_s, ny_s, nz_s = nx // sx, ny // sy, nz // sz
-
     segmented = np.empty((nx_s, ny_s, nz_s), dtype="object")
 
-    print("Segmenting volume...")
+    print("🚀 Segmenting volume...")
     for ix in tqdm(range(nx_s)):
         for iy in range(ny_s):
             for iz in range(nz_s):
-                # Extract region for each feature
+                # Extract window
                 region = {
                     f: image_features[f][
                         ix * sx : (ix + 1) * sx,
@@ -94,23 +127,22 @@ def segment_3d_image_from_data(
                     for f in feature_names
                 }
 
-                # Compute normalized histograms
+                # Compute histograms per feature
                 region_hists = {}
                 for f in feature_names:
                     h, _ = np.histogram(region[f], bins=num_bins, density=True)
                     region_hists[f] = h / (np.sum(h) + 1e-12)
 
-                # Compare to each class
+                # Compare to class histograms
                 distances = {
-                    label: compute_class_distance(region_hists, label)
-                    for label in labels
+                    lbl: compute_class_distance(region_hists, lbl) for lbl in labels
                 }
-                segmented[ix, iy, iz] = min(distances, key=distances.get)  # type: ignore
+                segmented[ix, iy, iz] = min(distances, key=distances.get)
 
-    print("Segmentation complete! Output shape:", segmented.shape)
+    print("✅ Segmentation complete! Output shape:", segmented.shape)
 
     # ------------------------------------------------------------
-    # 4. Visualization (optional)
+    # 5. Visualization (optional)
     # ------------------------------------------------------------
     if visualize:
         mid_z = segmented.shape[2] // 2

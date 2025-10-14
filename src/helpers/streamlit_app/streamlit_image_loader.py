@@ -192,7 +192,9 @@ def load_stack_from_h5(filepath: str) -> NDArray:
         dataset_name = list(file.keys())[0]
         data = np.array(file[dataset_name])
 
-    print(f"✅ Loaded stack with shape {data.shape} from {filepath}")
+    print(
+        f"the max value in the stack {dataset_name} is {data.max()}  and min is {data.min()}"
+    )
 
     return data
 

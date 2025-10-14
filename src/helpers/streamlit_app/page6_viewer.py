@@ -2,6 +2,7 @@ import os
 
 import streamlit as st
 
+from helpers.streamlit_app.streamlit_directories import fetch_h5_files, select_h5_file
 from helpers.streamlit_app.streamlit_image_loader import (
     load_stack_from_h5,
     slice_viewer,
@@ -29,7 +30,8 @@ def app() -> None:
 
     # Cached image loading
     st.write("### Sample Image from Dataset")
-    sample_images = load_stack_from_h5(data_path)
+    file = select_h5_file(fetch_h5_files(data_path))
+    sample_images = load_stack_from_h5(os.path.join(data_path, file))
     if sample_images is not None:
         index, image = slice_viewer(sample_images, prefix="sample_viewer")
         st.image(image, caption=f"Slice {index} of dataset")
@@ -76,11 +78,20 @@ def app() -> None:
 
         # Use caching for result directories too
         try:
-            x = load_stack_from_h5(result_dirs[parameter_1]).flatten()
-            y = load_stack_from_h5(result_dirs[parameter_2]).flatten()
+            file = select_h5_file(fetch_h5_files(result_dirs[parameter_1]))
+            x = load_stack_from_h5(
+                os.path.join(result_dirs[parameter_1], file)
+            ).flatten()
+            file = select_h5_file(fetch_h5_files(result_dirs[parameter_2]))
+            y = load_stack_from_h5(
+                os.path.join(result_dirs[parameter_2], file)
+            ).flatten()
 
             if len(unique_chosen) == 3:
-                z = load_stack_from_h5(result_dirs[parameter_3]).flatten()
+                file = select_h5_file(fetch_h5_files(result_dirs[parameter_3]))
+                z = load_stack_from_h5(
+                    os.path.join(result_dirs[parameter_3], file)
+                ).flatten()
                 fig = plot_3d(
                     x,
                     y,

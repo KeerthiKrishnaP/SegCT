@@ -14,7 +14,6 @@ from helpers.streamlit_app.streamlit_directories import (
 from helpers.streamlit_app.streamlit_image_loader import (
     load_stack_from_h5,
     load_structural_tensor,
-    normalize_stack,
     preview_dataset,
     save_stack_to_h5,
     slice_viewer,
@@ -33,9 +32,8 @@ from src.computations.comput_features import (
 @st.cache_data
 def load_and_normalize_images(data_path: str) -> np.ndarray | dict[str, NDArray]:
     """Load and normalize image stack from .h5 file (cached)."""
-    images = load_stack_from_h5(data_path)
 
-    return normalize_stack(images)
+    return load_stack_from_h5(data_path)
 
 
 # --------------------------------------------------------------------

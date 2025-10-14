@@ -146,13 +146,11 @@ def app() -> None:
         st.info("Please create or load a working directory first.")
         return
 
-    uploaded_files = st.file_uploader(
+    if uploaded_files := st.file_uploader(
         "Upload image stack",
         type=["png", "jpg", "jpeg", "tif", "tiff"],
         accept_multiple_files=True,
-    )
-
-    if uploaded_files:
+    ):
         image_stack = load_image_stack(uploaded_files)
         Cropper(image_stack, working_dir).run()
 
